@@ -1,0 +1,40 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Java / Gradle
+.gradle/
+**/build/
+!**/src/**/build/
+
+# Go
+agents/provider/bin/
+coverage.out
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+pnpm-debug.log*
+
+# Local infrastructure
+infrastructure/certificates/generated/
+infrastructure/compose/data/
+
+# Logs and temporary files
+*.log
+tmp/
+.tmp/

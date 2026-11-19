@@ -1,0 +1,145 @@
+# HYPER_LOOMS
+
+Community-owned, verifiable GPU compute for AI workloads.
+
+> **Development status:** Phase 0 — engineering foundation. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
+
+HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
+
+## Product direction
+
+The first usable product will focus on trusted **Compute Circles**—universities, AI clubs, open-source teams, research groups, and friends pooling compatible GPUs. Providers will eventually earn reciprocal compute credits for useful, measured work, and each node will build a factual Compute Passport from reliability and execution history.
+
+The first supported execution model is intentionally narrow:
+
+- Linux NVIDIA provider nodes;
+- approved, immutable AI workload images;
+- one exclusive GPU lease per job;
+- batch inference or fine-tuning workloads;
+- centrally coordinated scheduling and accounting;
+- object-storage-based input and result transfer.
+
+Arbitrary containers, public cash payouts, blockchain tokens, worldwide synchronous training, Windows providers, GPU time slicing, and game streaming are not part of the first release.
+
+## Architecture at a glance
+
+```text
+Next.js dashboard
+      |
+      | REST/JSON described by OpenAPI
+      v
+Spring Boot control plane ---- PostgreSQL
+      |                         source of truth
+      |
+      | bidirectional gRPC over mTLS (Phase 1)
+      v
+Go provider agent ----------- S3-compatible artifact storage
+      |
+      | verified execution policy
+      v
+Isolated Python/PyTorch workload container -> selected NVIDIA GPU
+```
+
+The browser-facing API uses REST. OpenAPI is the machine-readable contract for that REST API, enabling interactive documentation, typed client generation, and compatibility checks. Provider agents use gRPC because they require typed, long-lived, bidirectional communication.
+
+## Technology baseline
+
+| Area | Decision |
+|---|---|
+| Dashboard | Next.js, TypeScript, Tailwind CSS |
+| Control plane | Java, Spring Boot, modular monolith |
+| Provider agent | Go |
+| AI workloads | Python and PyTorch in approved OCI images |
+| Browser API | REST/JSON with an OpenAPI contract |
+| Agent protocol | Protocol Buffers and bidirectional gRPC over mTLS |
+| Primary database | PostgreSQL |
+| Initial durable queue | PostgreSQL leases, `SKIP LOCKED`, transactional outbox |
+| Artifact storage | S3-compatible storage; MinIO for local development |
+| Execution | containerd/Docker with NVIDIA Container Toolkit |
+| Stronger sandbox | gVisor only where its GPU/driver matrix is compatible |
+| Image verification | Cosign/Sigstore |
+| Observability | Structured logs, OpenTelemetry, Prometheus, Grafana |
+| Local environment | Docker Compose |
+
+## Repository layout
+
+```text
+apps/web/                    Next.js operator and user dashboard
+services/control-plane/      Spring Boot control plane
+agents/provider/             Go provider agent
+workloads/python-sdk/        Future workload SDK and approved recipes
+proto/                       Shared versioned gRPC contracts
+infrastructure/              Local compose, monitoring, and certificate assets
+docs/                        Product, architecture, security, and ADRs
+.github/workflows/           CI quality gates
+```
+
+## Phase 0 quick start
+
+Prerequisites:
+
+- Java 17+
+- Node.js 22+
+- pnpm
+- Go 1.27+ (or Docker for an isolated Go build)
+- Docker Desktop/Engine with Compose
+
+Copy `.env.example` to `.env` only when overriding local defaults. Do not commit `.env`.
+
+```powershell
+# Start PostgreSQL and MinIO
+docker compose -f infrastructure/compose/compose.yaml up -d
+
+# Start the control plane
+cd services/control-plane
+./gradlew bootRun
+
+# Start the dashboard in another terminal
+cd apps/web
+pnpm install --frozen-lockfile
+pnpm dev
+
+# Run the provider-agent foundation in another terminal
+cd agents/provider
+go run ./cmd/hyperlooms-agent
+```
+
+Local endpoints:
+
+- Dashboard: `http://localhost:3000`
+- Control-plane status: `http://localhost:8080/api/v1/system/status`
+- Health: `http://localhost:8080/actuator/health`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- API explorer: `http://localhost:8080/swagger-ui.html`
+- MinIO console: `http://localhost:9001`
+- Provider-agent health: `http://127.0.0.1:9091/health/live`
+
+## Documentation
+
+- [Product vision](docs/product/vision.md)
+- [Scope and non-goals](docs/product/product-scope.md)
+- [Roadmap](docs/product/roadmap.md)
+- [System overview](docs/architecture/system-overview.md)
+- [Job lifecycle](docs/architecture/job-lifecycle.md)
+- [Threat model](docs/security/threat-model.md)
+- [Architecture decisions](docs/decisions/README.md)
+- [Engineering standards](docs/development/engineering-standards.md)
+- [Testing strategy](docs/development/testing-strategy.md)
+- [Phase 0 verification record](docs/development/phase-zero-verification.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+
+## Engineering principles
+
+- Persist every authoritative state transition.
+- Treat retries and duplicate delivery as normal distributed-system behavior.
+- Use leases and fencing tokens for remote execution ownership.
+- Make externally visible mutations idempotent.
+- Never describe planned functionality as implemented.
+- Prefer a modular monolith until a measured boundary justifies another service.
+- Deny workload capabilities by default and add them deliberately.
+- Optimize for an observable failure over a silent one.
+
+## License
+
+No open-source license has been selected yet. Until the owner chooses one, all rights are reserved. Adding a license is a product and business decision, not an automatic scaffolding step.

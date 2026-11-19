@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /services/control-plane
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /agents/provider
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /services/control-plane
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /agents/provider
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /apps/web
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

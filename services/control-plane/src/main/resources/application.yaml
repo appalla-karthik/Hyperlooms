@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: hyperlooms-control-plane
+    version: ${HYPERLOOMS_VERSION:development}
+  datasource:
+    url: ${HYPERLOOMS_DATABASE_URL:jdbc:postgresql://localhost:5432/hyperlooms}
+    username: ${HYPERLOOMS_DATABASE_USER:hyperlooms}
+    password: ${HYPERLOOMS_DATABASE_PASSWORD:local-development-only}
+    hikari:
+      maximum-pool-size: ${HYPERLOOMS_DATABASE_POOL_SIZE:10}
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+    validate-migration-naming: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${HYPERLOOMS_CONTROL_PLANE_PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  observations:
+    key-values:
+      service: hyperlooms-control-plane
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
