@@ -61,6 +61,7 @@ services:
         mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
         mc mb --ignore-existing "local/$${HYPERLOOMS_ARTIFACT_BUCKET}"
         mc anonymous set none "local/$${HYPERLOOMS_ARTIFACT_BUCKET}"
+        mc stat "local/$${HYPERLOOMS_ARTIFACT_BUCKET}"
     networks:
       - hyperlooms-local
 
