@@ -3,7 +3,7 @@
 ## Local development
 
 - dashboard, control plane, and provider agent run as developer processes;
-- PostgreSQL and MinIO run with Docker Compose;
+- PostgreSQL and a SeaweedFS S3-compatible development instance run with Docker Compose;
 - generated development certificates are excluded from Git;
 - a CPU/mock execution path will support CI where no GPU exists.
 

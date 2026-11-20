@@ -17,8 +17,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"${compose[@]}" up -d --wait --wait-timeout 180 postgres minio
-"${compose[@]}" run --rm minio-bootstrap
+"${compose[@]}" up -d --wait --wait-timeout 180 postgres object-storage
+"${compose[@]}" run --rm artifact-bootstrap
 
 pushd "$repo_root/services/control-plane" >/dev/null
 bash ./gradlew --no-daemon bootRun >"$log_file" 2>&1 &
@@ -57,4 +57,4 @@ schema_phase="$("${compose[@]}" exec -T postgres psql -U "$db_user" -d "$db_name
 [[ "$migration_count" == "1" ]] || { echo "Flyway V1 was not applied successfully" >&2; exit 1; }
 [[ "$schema_phase" == "foundation" ]] || { echo "Foundation metadata is missing" >&2; exit 1; }
 
-echo "Phase 0 stack smoke passed: PostgreSQL/Flyway, MinIO bucket, status, health, and OpenAPI."
+echo "Phase 0 stack smoke passed: PostgreSQL/Flyway, private S3 bucket, status, health, and OpenAPI."

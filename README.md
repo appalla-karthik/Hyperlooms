@@ -54,7 +54,7 @@ The browser-facing API uses REST. OpenAPI is the machine-readable contract for t
 | Agent protocol | Protocol Buffers and bidirectional gRPC over mTLS |
 | Primary database | PostgreSQL |
 | Initial durable queue | PostgreSQL leases, `SKIP LOCKED`, transactional outbox |
-| Artifact storage | S3-compatible storage; MinIO for local development |
+| Artifact storage | S3-compatible storage; SeaweedFS for local development |
 | Execution | containerd/Docker with NVIDIA Container Toolkit |
 | Stronger sandbox | gVisor only where its GPU/driver matrix is compatible |
 | Image verification | Cosign/Sigstore |
@@ -87,7 +87,7 @@ Prerequisites:
 Copy `.env.example` to `.env` only when overriding local defaults. Do not commit `.env`.
 
 ```powershell
-# Start PostgreSQL and MinIO
+# Start PostgreSQL and S3-compatible storage
 docker compose -f infrastructure/compose/compose.yaml up -d
 
 # Start the control plane
@@ -111,7 +111,7 @@ Local endpoints:
 - Health: `http://localhost:8080/actuator/health`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 - API explorer: `http://localhost:8080/swagger-ui.html`
-- MinIO console: `http://localhost:9001`
+- SeaweedFS Admin UI: `http://localhost:9001`
 - Provider-agent health: `http://127.0.0.1:9091/health/live`
 
 ## Documentation
