@@ -7,6 +7,11 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V2 execution schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '3' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V3 provider enrollment schema was not applied';
+    END IF;
 END;
 $$;
 

@@ -5,6 +5,7 @@ This first Phase 1 increment defines durable records and constraints, not an ope
 ## Records
 
 - `provider_nodes` stores a provider identity and enrollment/availability state. A claimed node ID must later be bound to its mTLS client certificate; an agent-supplied string is not proof of identity.
+- `provider_enrollment_invites` stores a one-time, short-lived, revocable invite digest. Its 256-bit bearer token is returned only when issued, never persisted in plaintext. Redeeming it creates a `PENDING/OFFLINE` node, not a verified provider.
 - `provider_gpus` stores reported hardware separately from verification state. Reports are never schedulable solely because the agent sent them.
 - `workload_recipes` identifies an OCI repository and immutable SHA-256 digest, with explicit approval and resource ceilings.
 - `jobs` records the requester, recipe, state, request hash, and a requester-scoped idempotency key. The internal submission service now rejects a reused key with a different recipe or hash, and returns the same job for retries.
@@ -13,6 +14,10 @@ This first Phase 1 increment defines durable records and constraints, not an ope
 - `outbox_events` is written in the same transaction as initial job creation. No dispatcher is implemented yet.
 
 The database also limits one active attempt per job. Scheduler transactions must atomically claim a queued job, create its attempt and lease, and update its state; these application operations are not yet implemented. The live PostgreSQL CI smoke tests the migration, idempotency uniqueness, exclusive lease, fencing sequence, and outbox insertion inside a rolled-back transaction. A separate live-database integration test exercises approved-recipe submission, retries, conflicts, and concurrent duplicate requests.
+
+## Provider enrollment boundary
+
+`ProviderEnrollmentService` is internal-only. A trusted operator workflow can issue an invite for an owner subject, with a 5-minute to 24-hour lifetime, and revoke it before use. The token is randomly generated and only its SHA-256 digest is stored. Redemption locks the invite row so concurrent retries create exactly one node and one `PROVIDER_NODE_PENDING` outbox event. The same token can replay the resulting node ID, but it does **not** authenticate later agent sessions. No invite issuance or redemption HTTP endpoint is exposed. Certificate issuance/binding, authenticated capability reporting, hardware verification, and a real operator authorization path remain to be built before any node can become eligible to run jobs.
 
 ## Submission boundary
 
@@ -24,4 +29,4 @@ The database also limits one active attempt per job. Scheduler transactions must
 
 ## Next implementation increment
 
-Implement authenticated, controlled provider enrollment and the canonical authenticated job API, then input staging and the `CREATED` to `QUEUED` transition. Only after those are tested should scheduling and agent job commands be wired. Real execution qualification requires a Linux NVIDIA host.
+Bind a provider node to its mTLS client certificate, then accept and verify capability reports. Build the canonical authenticated job API, input staging, and `CREATED` to `QUEUED` transition. Only after those are tested should scheduling and agent job commands be wired. Real execution qualification requires a Linux NVIDIA host.

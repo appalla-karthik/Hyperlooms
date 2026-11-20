@@ -17,7 +17,7 @@ Exit criterion: a new developer can understand the system, start dependencies, b
 
 ## Phase 1 — Single-node vertical slice
 
-Status: in progress. The first increment defines durable execution state and an initial agent hello/heartbeat contract; no live job execution is claimed yet.
+Status: in progress. Durable execution state, an initial agent hello/heartbeat contract, internal idempotent job creation, and pending-node invite redemption exist. Neither an authenticated public API nor live GPU execution is claimed yet.
 
 - one provider registers verified capabilities;
 - one supported PyTorch recipe is submitted;
