@@ -29,6 +29,8 @@ node_modules/
 out/
 *.tsbuildinfo
 pnpm-debug.log*
+test-results/
+playwright-report/
 
 # Local infrastructure
 infrastructure/certificates/generated/

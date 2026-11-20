@@ -4,8 +4,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HYPER_LOOMS",
-  description: "Community-owned, verifiable GPU compute for AI workloads.",
+  title: "Hyperlooms - Big ideas. Shared power.",
+  description:
+    "Building a community-powered GPU network. Connecting people with spare compute to people ready to create. Explore the vision and follow the build.",
 };
 
 export default function RootLayout({
