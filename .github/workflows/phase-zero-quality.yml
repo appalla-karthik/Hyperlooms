@@ -27,7 +27,7 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
       - uses: gradle/actions/wrapper-validation@v4
-      - run: ./gradlew --no-daemon clean test bootJar
+      - run: bash ./gradlew --no-daemon clean test bootJar
 
   provider-agent:
     name: Provider agent
