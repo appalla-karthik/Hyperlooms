@@ -4,6 +4,8 @@ Roadmap entries are outcome gates, not date promises.
 
 ## Phase 0 — Engineering foundation
 
+Status: complete. The [verification record](../development/phase-zero-verification.md) links the live-stack and component CI evidence.
+
 - approved product and architecture baseline;
 - modular monorepo scaffolding;
 - local PostgreSQL and S3-compatible storage;

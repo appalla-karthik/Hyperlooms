@@ -1,27 +1,26 @@
 # Phase 0 Verification Record
 
 - Date: 2026-11-20
-- Environment: Windows development workstation
-- Status: code quality gates passed; live container runtime check pending
+- Status: Phase 0 foundation acceptance gates passed on Linux CI; remote GPU workloads remain unimplemented.
+- Evidence: [Phase 0 quality run for `6616293`](https://github.com/appalla-karthik/Hyperlooms/actions/runs/44709522386)
 
-## Passed locally
+## Acceptance checks
 
-| Component | Verification |
+| Gate | Verified behavior |
 |---|---|
-| Control plane | Gradle clean build, Spring MVC test, dependency lock generation, executable Boot JAR |
-| Dashboard | ESLint, strict TypeScript, Vitest, Prettier, optimized Next.js production build |
-| Provider agent | `gofmt`, `go vet`, unit tests with coverage, Windows binary build, version command |
-| Agent runtime | Live liveness and readiness HTTP responses |
-| Infrastructure | Docker Compose definition parsing and interpolation |
+| Control plane | Gradle test and executable Boot JAR build; REST status and Actuator health respond; OpenAPI describes the implemented status route. |
+| PostgreSQL | Compose starts a healthy PostgreSQL instance; Spring Boot applies Flyway V1 on startup; the migration history and foundation metadata are queried from the live database. |
+| Artifact storage | Official SeaweedFS MinIO-compatible adapter starts from a digest-pinned image; bootstrap creates the bucket, uploads/downloads and checks a probe, then removes it; anonymous bucket listing is denied. |
+| Dashboard | ESLint, strict TypeScript, Vitest, Prettier, production build, and Playwright desktop/mobile flows including accessibility checks. |
+| Provider agent | `gofmt`, `go vet`, race-enabled unit tests with coverage, and Linux binary build. |
+| Supply chain | Compose configuration validation, dependency locks, and secret scan. |
 
-The Go toolchain used for local verification was downloaded from `go.dev`, checked against the release SHA-256, and extracted to a temporary directory. It was not installed system-wide or committed.
+The Windows workstation also passed the dashboard checks/build and 14 Playwright tests (two intentional skips), control-plane tests/build, provider-agent binary/health checks, and Compose configuration validation. The local Go toolchain was a SHA-256-verified temporary download, not a system installation.
 
-## Pending environment check
+Docker Desktop/WSL could not run the live containers reliably on this workstation (engine errors and a WSL virtual-disk mount failure). The live PostgreSQL, migration, S3, and API smoke therefore ran on GitHub's Linux runner. This is a local machine limitation, not a claim that a Windows live-stack test passed.
 
-Docker Desktop could not remain running on the workstation because available physical/page-file memory was insufficient during verification. Consequently, the PostgreSQL and MinIO containers were not started and the Flyway migration was not executed against a live PostgreSQL instance locally.
+The provider-agent race detector ran in Linux CI; the temporary Windows Go toolchain had no C compiler configured.
 
-CI is configured to build the code components and validate the Compose definition. A live PostgreSQL integration-test job will be added with the Phase 1 persistence model. The first Phase 1 task must also run the baseline migration against PostgreSQL before domain migrations are accepted.
+## Scope boundary
 
-## CI-specific check
-
-The provider-agent CI job runs `go test -race`. The local Windows portable toolchain had no C compiler configured, so the race detector was intentionally left to Linux CI rather than weakening or falsely reporting the check.
+Phase 0 proves the engineering foundation and repeatable checks, not a usable compute marketplace. Registration/login, provider onboarding, scheduler leases, GPU execution, artifact authorization, billing/credits, and a private beta belong to later phases. The public website explains the vision; it is not yet the authenticated product dashboard.

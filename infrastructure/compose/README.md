@@ -4,7 +4,7 @@ This Compose project starts only Phase 0 stateful dependencies:
 
 - PostgreSQL, the future authoritative business-state store;
 - SeaweedFS (official MinIO-compatible adapter), local S3-compatible artifact storage;
-- a one-shot bootstrap container that creates a private artifact bucket.
+- a one-shot bootstrap container that creates a private artifact bucket and checks an S3 object round-trip.
 
 ```powershell
 docker compose -f infrastructure/compose/compose.yaml config
