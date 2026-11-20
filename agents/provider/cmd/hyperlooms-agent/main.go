@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/GodaniShubham/HYPER_LOOMS/agents/provider/internal/config"
-	"github.com/GodaniShubham/HYPER_LOOMS/agents/provider/internal/health"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/config"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/health"
 )
 
 var (

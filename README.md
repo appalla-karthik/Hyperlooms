@@ -2,7 +2,7 @@
 
 Community-owned, verifiable GPU compute for AI workloads.
 
-> **Development status:** Phase 0 engineering foundation is complete; Phase 1 execution work has not begun. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
+> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema and initial agent protocol are being introduced, but the repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
 
 HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
 
@@ -121,6 +121,7 @@ Local endpoints:
 - [Roadmap](docs/product/roadmap.md)
 - [System overview](docs/architecture/system-overview.md)
 - [Job lifecycle](docs/architecture/job-lifecycle.md)
+- [Execution-core invariants](docs/architecture/execution-core.md)
 - [Threat model](docs/security/threat-model.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Engineering standards](docs/development/engineering-standards.md)

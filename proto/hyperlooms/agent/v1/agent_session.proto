@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package hyperlooms.agent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/appalla-karthik/Hyperlooms/agents/provider/gen/hyperlooms/agent/v1;agentv1";
+option java_multiple_files = true;
+option java_package = "dev.hyperlooms.protocol.agent.v1";
+
+// A single outbound, mTLS-authenticated session carries bounded agent control messages.
+// The server must bind node_id to the authenticated client certificate identity.
+service AgentSessionService {
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+}
+
+message ConnectRequest {
+  string message_id = 1;
+  oneof body {
+    AgentHello hello = 10;
+    AgentHeartbeat heartbeat = 11;
+  }
+}
+
+message ConnectResponse {
+  string message_id = 1;
+  oneof body {
+    HelloAcknowledgement hello_acknowledgement = 10;
+    HeartbeatAcknowledgement heartbeat_acknowledgement = 11;
+  }
+}
+
+message AgentHello {
+  string node_id = 1;
+  uint32 protocol_version = 2;
+  string agent_version = 3;
+  repeated GpuCapability gpus = 4;
+  google.protobuf.Timestamp reported_at = 5;
+}
+
+// A report is not verification. The control plane validates claims before eligibility.
+message GpuCapability {
+  string gpu_uuid = 1;
+  string model = 2;
+  uint64 vram_bytes = 3;
+  string driver_version = 4;
+  string cuda_version = 5;
+}
+
+enum AvailabilityState {
+  AVAILABILITY_STATE_UNSPECIFIED = 0;
+  AVAILABILITY_STATE_OFFLINE = 1;
+  AVAILABILITY_STATE_AVAILABLE = 2;
+  AVAILABILITY_STATE_BUSY = 3;
+  AVAILABILITY_STATE_DRAINING = 4;
+}
+
+message AgentHeartbeat {
+  string node_id = 1;
+  uint64 sequence = 2;
+  AvailabilityState availability = 3;
+  google.protobuf.Timestamp sent_at = 4;
+}
+
+enum HelloRejectionReason {
+  HELLO_REJECTION_REASON_UNSPECIFIED = 0;
+  HELLO_REJECTION_REASON_UNKNOWN_NODE = 1;
+  HELLO_REJECTION_REASON_REVOKED_NODE = 2;
+  HELLO_REJECTION_REASON_IDENTITY_MISMATCH = 3;
+  HELLO_REJECTION_REASON_UNSUPPORTED_PROTOCOL = 4;
+}
+
+message HelloAcknowledgement {
+  string request_message_id = 1;
+  bool accepted = 2;
+  HelloRejectionReason rejection_reason = 3;
+  uint32 heartbeat_interval_seconds = 4;
+  google.protobuf.Timestamp server_time = 5;
+}
+
+message HeartbeatAcknowledgement {
+  string request_message_id = 1;
+  google.protobuf.Timestamp server_time = 2;
+}

@@ -1,6 +1,6 @@
 # Job Lifecycle
 
-## Planned state model
+## Phase 1 state model
 
 ```text
 CREATED -> UPLOADING -> QUEUED -> LEASED -> STARTING -> RUNNING
@@ -12,7 +12,7 @@ Recoverable paths: LEASE_EXPIRED/NODE_LOST -> RETRY_WAIT -> QUEUED
 Terminal paths: FAILED, CANCELED, EXPIRED
 ```
 
-The exact machine-readable state model will be introduced with Phase 1 migrations and tests.
+`JobState` in the control plane is the transition policy, and Flyway V2 restricts stored states. `RETRY_WAIT` may return to `QUEUED`; terminal states never reopen. Lease expiry and node loss end an attempt, not the job's immutable attempt history. These rules are introduced but are not yet connected to submission or scheduling endpoints.
 
 ## Submission
 
