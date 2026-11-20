@@ -19,6 +19,8 @@ trap cleanup EXIT
 
 "${compose[@]}" up -d --wait --wait-timeout 180 postgres object-storage
 "${compose[@]}" run --rm artifact-bootstrap
+anonymous_bucket_status="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "http://localhost:${HYPERLOOMS_S3_API_PORT:-9000}/${HYPERLOOMS_ARTIFACT_BUCKET:-hyperlooms-artifacts}")"
+[[ "$anonymous_bucket_status" == "403" ]] || { echo "Artifact bucket permits unexpected anonymous access: HTTP $anonymous_bucket_status" >&2; exit 1; }
 
 pushd "$repo_root/services/control-plane" >/dev/null
 bash ./gradlew --no-daemon bootRun >"$log_file" 2>&1 &
@@ -57,4 +59,4 @@ schema_phase="$("${compose[@]}" exec -T postgres psql -U "$db_user" -d "$db_name
 [[ "$migration_count" == "1" ]] || { echo "Flyway V1 was not applied successfully" >&2; exit 1; }
 [[ "$schema_phase" == "foundation" ]] || { echo "Foundation metadata is missing" >&2; exit 1; }
 
-echo "Phase 0 stack smoke passed: PostgreSQL/Flyway, private S3 bucket, status, health, and OpenAPI."
+echo "Phase 0 stack smoke passed: PostgreSQL/Flyway, private S3 object round-trip, status, health, and OpenAPI."

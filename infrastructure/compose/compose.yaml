@@ -66,6 +66,10 @@ services:
           aws --endpoint-url "$${endpoint}" s3api create-bucket --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}"
         fi
         aws --endpoint-url "$${endpoint}" s3api head-bucket --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}"
+        aws --endpoint-url "$${endpoint}" s3api put-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe --body /etc/hostname >/dev/null
+        aws --endpoint-url "$${endpoint}" s3api get-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe /tmp/hyperlooms-phase-zero-probe >/dev/null
+        cmp -s /etc/hostname /tmp/hyperlooms-phase-zero-probe
+        aws --endpoint-url "$${endpoint}" s3api delete-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe >/dev/null
     networks:
       - hyperlooms-local
 
