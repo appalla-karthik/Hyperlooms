@@ -66,9 +66,11 @@ services:
           aws --endpoint-url "$${endpoint}" s3api create-bucket --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}"
         fi
         aws --endpoint-url "$${endpoint}" s3api head-bucket --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}"
-        aws --endpoint-url "$${endpoint}" s3api put-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe --body /etc/hostname >/dev/null
+        printf '%s\n' 'hyperlooms-phase-zero-roundtrip' >/tmp/hyperlooms-phase-zero-input
+        aws --endpoint-url "$${endpoint}" s3api put-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe --body /tmp/hyperlooms-phase-zero-input >/dev/null
         aws --endpoint-url "$${endpoint}" s3api get-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe /tmp/hyperlooms-phase-zero-probe >/dev/null
-        cmp -s /etc/hostname /tmp/hyperlooms-phase-zero-probe
+        IFS= read -r roundtrip_value </tmp/hyperlooms-phase-zero-probe
+        test "$${roundtrip_value}" = 'hyperlooms-phase-zero-roundtrip'
         aws --endpoint-url "$${endpoint}" s3api delete-object --bucket "$${HYPERLOOMS_ARTIFACT_BUCKET}" --key .phase-zero-probe >/dev/null
     networks:
       - hyperlooms-local
