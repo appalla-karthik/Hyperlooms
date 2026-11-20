@@ -14,6 +14,8 @@ Exercise Spring MVC contracts, persistence adapters, Go host adapters, and dashb
 
 Use real PostgreSQL and S3-compatible services in isolated containers. Verify Flyway migrations, locking, idempotency, object permissions, and transaction boundaries. GPU-independent mock execution keeps these tests available in CI.
 
+The control plane's `integrationTest` Gradle task requires a running PostgreSQL instance configured through `HYPERLOOMS_DATABASE_*`. CI runs it after the Compose-backed stack and schema smoke checks. Locally, start `docker compose -f infrastructure/compose/compose.yaml up -d --wait postgres`, then run `./gradlew integrationTest` from `services/control-plane` (use `gradlew.bat` in PowerShell). Normal `test` excludes the `integration` tag so unit tests do not silently depend on a database.
+
 ### Contract tests
 
 Detect incompatible OpenAPI and Protobuf changes. Generated clients must compile against the published contract.

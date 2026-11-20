@@ -107,6 +107,9 @@ jobs:
         timeout-minutes: 10
       - run: bash scripts/verify-phase-one-schema.sh
         timeout-minutes: 2
+      - run: bash ./gradlew --no-daemon integrationTest
+        working-directory: services/control-plane
+        timeout-minutes: 5
 
   secret-scan:
     name: Secret scan
