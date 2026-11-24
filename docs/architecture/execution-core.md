@@ -6,6 +6,7 @@ This first Phase 1 increment defines durable records and constraints, not an ope
 
 - `provider_nodes` stores a provider identity and enrollment/availability state. A claimed node ID must later be bound to its mTLS client certificate; an agent-supplied string is not proof of identity.
 - `provider_enrollment_invites` stores a one-time, short-lived, revocable invite digest. Its 256-bit bearer token is returned only when issued, never persisted in plaintext. Redeeming it creates a `PENDING/OFFLINE` node, not a verified provider.
+- `provider_certificates` binds a node to one current certificate fingerprint and expiry. Binding is an operator-side expectation; the node becomes `VERIFIED/OFFLINE` only when that exact certificate is presented through an authenticated mTLS session. Revocation disables the credential and node.
 - `provider_gpus` stores reported hardware separately from verification state. Reports are never schedulable solely because the agent sent them.
 - `workload_recipes` identifies an OCI repository and immutable SHA-256 digest, with explicit approval and resource ceilings.
 - `jobs` records the requester, recipe, state, request hash, and a requester-scoped idempotency key. The internal submission service now rejects a reused key with a different recipe or hash, and returns the same job for retries.
@@ -17,7 +18,11 @@ The database also limits one active attempt per job. Scheduler transactions must
 
 ## Provider enrollment boundary
 
-`ProviderEnrollmentService` is internal-only. A trusted operator workflow can issue an invite for an owner subject, with a 5-minute to 24-hour lifetime, and revoke it before use. The token is randomly generated and only its SHA-256 digest is stored. Redemption locks the invite row so concurrent retries create exactly one node and one `PROVIDER_NODE_PENDING` outbox event. The same token can replay the resulting node ID, but it does **not** authenticate later agent sessions. No invite issuance or redemption HTTP endpoint is exposed. Certificate issuance/binding, authenticated capability reporting, hardware verification, and a real operator authorization path remain to be built before any node can become eligible to run jobs.
+`ProviderEnrollmentService` is internal-only. A trusted operator workflow can issue an invite for an owner subject, with a 5-minute to 24-hour lifetime, and revoke it before use. The token is randomly generated and only its SHA-256 digest is stored. Redemption locks the invite row so concurrent retries create exactly one node and one `PROVIDER_NODE_PENDING` outbox event. The same token can replay the resulting node ID, but it does **not** authenticate later agent sessions. No invite issuance or redemption HTTP endpoint is exposed.
+
+`ProviderIdentityService` can register an expected, operator-approved certificate for a pending node. The certificate must contain exactly one provider URI SAN in the form `urn:hyperlooms:provider:<canonical-lowercase-uuid>` matching the node ID. Its DER SHA-256 fingerprint is stored; a different certificate or a claimed node ID alone is not enough. `activateFromAuthenticatedPeer` must be called **only after** the transport verifies the certificate chain, client-auth usage, and private-key possession in an mTLS handshake. The current code parses the certificate and checks its fingerprint, SAN, expiry, stored state, and revocation, but does not implement the TLS server, CA issuance, or operator authorization. Do not expose these internal service methods through an unauthenticated endpoint.
+
+`ProviderCapabilityService` accepts a bounded protocol-v1 hello report only for an active certificate-bound peer. It cross-checks the claimed node ID, records GPU attributes as `REPORTED`, and keeps the node `OFFLINE`. An unchanged, previously verified GPU remains verified; changed attributes reset it to `REPORTED`, and a GPU missing from the report becomes `REJECTED`. Actual hardware attestation/verification and the transition to `AVAILABLE` are still absent, so reports alone never authorize scheduling.
 
 ## Submission boundary
 
@@ -29,4 +34,4 @@ The database also limits one active attempt per job. Scheduler transactions must
 
 ## Next implementation increment
 
-Bind a provider node to its mTLS client certificate, then accept and verify capability reports. Build the canonical authenticated job API, input staging, and `CREATED` to `QUEUED` transition. Only after those are tested should scheduling and agent job commands be wired. Real execution qualification requires a Linux NVIDIA host.
+Implement the mTLS gRPC transport and certificate issuance/operator authorization path, then verify reported hardware and add safe availability/heartbeat handling. Build the canonical authenticated job API, input staging, and `CREATED` to `QUEUED` transition. Only after those are tested should scheduling and agent job commands be wired. Real execution qualification requires a Linux NVIDIA host.

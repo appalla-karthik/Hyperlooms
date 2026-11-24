@@ -12,6 +12,11 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V3 provider enrollment schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '4' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V4 provider certificate schema was not applied';
+    END IF;
 END;
 $$;
 
