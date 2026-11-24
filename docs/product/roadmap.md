@@ -17,7 +17,7 @@ Exit criterion: a new developer can understand the system, start dependencies, b
 
 ## Phase 1 — Single-node vertical slice
 
-Status: in progress. Durable execution state, an initial agent hello/heartbeat contract, internal idempotent job creation, pending-node invites, an operator-only CA-validated certificate binding/rotation/revocation path, and an opt-in mTLS agent session now exist. CI is configured to run live PostgreSQL/mTLS qualification; a green run still needs confirmation. A Linux NVIDIA host qualification, authenticated public API, verified hardware, and live GPU execution are still pending. Production PKI issuance and operator SSO/RBAC are not yet implemented.
+Status: in progress. Durable execution state, an initial agent hello/heartbeat contract, internal idempotent job creation, pending-node invites, an operator-only CA-validated certificate binding/rotation/revocation path, an opt-in mTLS agent session, a read-only local provider console, and a Linux service unit now exist. PostgreSQL migration/schema smoke passed locally; real mTLS integration qualification still needs a completed run (see the [verification record](../development/phase-one-verification.md)). A Linux NVIDIA host qualification, provider installer/setup flow, authenticated public API, verified hardware, and live GPU execution are still pending. Production PKI issuance and operator SSO/RBAC are not yet implemented.
 
 - one provider registers verified capabilities;
 - one supported PyTorch recipe is submitted;

@@ -1,0 +1,9 @@
+# Linux service packaging
+
+This unit runs the provider agent in the background on a Linux NVIDIA host. After host setup, the provider uses the browser console at `http://127.0.0.1:9091/` for daily status instead of keeping a terminal open. It is **not** a self-service installer or certificate issuer.
+
+The host administrator must install a signed/reviewed Linux agent binary at `/usr/local/bin/hyperlooms-agent`, create the unprivileged `hyperlooms-agent` user/group, and install the unit at `/etc/systemd/system/hyperlooms-agent.service`. Put the agent environment values from the repository `.env.example` into `/etc/hyperlooms-agent/agent.env` with root ownership and `0600` permissions. The client key and cert files must be readable by the service user but not other users. Keep the CA private key off this host.
+
+Set `HYPERLOOMS_AGENT_HEALTH_ADDRESS=127.0.0.1:9091` in the environment file. The console itself rejects non-loopback peers and Host headers; binding the listener to loopback is still the preferred defense. The unit intentionally does not use `PrivateDevices`, because NVIDIA device access is required. Confirm the installed driver and `nvidia-smi` work for the service user before enrollment.
+
+After the unit and credentials are installed, the administrator runs `systemctl daemon-reload` and `systemctl enable --now hyperlooms-agent`. Check `systemctl status hyperlooms-agent` and `journalctl -u hyperlooms-agent` when diagnosing startup. The provider then opens the local console in a browser. An installer, upgrade/rollback process, and Linux NVIDIA qualification still need to be built and tested before public distribution.

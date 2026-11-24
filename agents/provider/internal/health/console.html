@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Hyperlooms — Provider console</title>
+  <link rel="stylesheet" href="/console.css">
+  <script src="/console.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">H</span><span>Hyperlooms</span><span class="brand-sub">Provider console</span></div>
+      <span class="local-tag">LOCAL DEVICE</span>
+    </header>
+
+    <main>
+      <div class="eyebrow">NODE OVERVIEW <span> / </span> PHASE 1</div>
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <h1 id="page-title">Compute starts here.</h1>
+          <p>See what this machine is reporting and whether its secure session is connected. This console stays on your device.</p>
+        </div>
+        <div id="connection-badge" class="status-badge" aria-live="polite"><span class="status-dot"></span><span id="connection-label">Checking connection</span></div>
+      </section>
+
+      <section class="metrics" aria-label="Agent status">
+        <article class="metric"><div class="metric-label">AGENT</div><div id="agent-id" class="metric-value">—</div><div id="agent-version" class="metric-foot">Version —</div></article>
+        <article class="metric"><div class="metric-label">NODE ID</div><div id="node-id" class="metric-value mono small">Not enrolled</div><div class="metric-foot">Certificate-bound identity</div></article>
+        <article class="metric"><div class="metric-label">CONTROL PLANE</div><div id="control-plane" class="metric-value mono small">Not configured</div><div id="last-heartbeat" class="metric-foot">No heartbeat yet</div></article>
+      </section>
+
+      <div class="grid">
+        <section class="panel gpu-panel" aria-labelledby="gpu-title">
+          <div class="panel-heading"><div><div class="eyebrow">LOCAL HARDWARE</div><h2 id="gpu-title">GPU inventory</h2></div><span id="gpu-count" class="counter">0 detected</span></div>
+          <div id="gpu-list" class="gpu-list"><p class="empty">Waiting for hardware discovery.</p></div>
+          <div class="panel-note">This is a local NVIDIA driver discovery result. A detected GPU is not verified or available for jobs until the control plane approves it.</div>
+        </section>
+
+        <section class="panel details-panel" aria-labelledby="details-title">
+          <div class="eyebrow">SESSION</div><h2 id="details-title">Connection details</h2>
+          <dl class="details">
+            <div><dt>Readiness</dt><dd id="readiness">Checking</dd></div>
+            <div><dt>Last authenticated</dt><dd id="last-connected">Never</dd></div>
+            <div><dt>Last heartbeat</dt><dd id="heartbeat-detail">Never</dd></div>
+            <div><dt>Transport</dt><dd>Outbound gRPC · mTLS</dd></div>
+          </dl>
+          <div id="diagnostic" class="diagnostic" hidden><span>DIAGNOSTIC</span><p id="diagnostic-message"></p></div>
+        </section>
+      </div>
+
+      <section class="panel events-panel" aria-labelledby="events-title"><div class="eyebrow">LOCAL ACTIVITY</div><h2 id="events-title">Recent events</h2><div id="event-list" class="event-list"><p class="empty">No events yet.</p></div></section>
+
+      <section class="next-step" aria-labelledby="next-title"><div><div class="eyebrow">SETUP STATE</div><h2 id="next-title">What happens next?</h2><p id="next-message">Checking this agent's configuration.</p></div><span class="arrow" aria-hidden="true">↗</span></section>
+    </main>
+
+    <footer><span>Hyperlooms Provider Agent</span><span>Local status only · No workload execution yet</span></footer>
+  </div>
+</body>
+</html>

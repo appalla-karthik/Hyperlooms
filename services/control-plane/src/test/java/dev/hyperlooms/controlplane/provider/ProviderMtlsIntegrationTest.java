@@ -17,10 +17,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,7 +44,6 @@ import io.grpc.stub.StreamObserver;
 
 /** Real TLS + PostgreSQL boundary; GPU discovery is deliberately not simulated here. */
 @Tag("integration")
-@EnabledOnOs(OS.LINUX)
 @SpringBootTest
 class ProviderMtlsIntegrationTest {
 
@@ -64,6 +63,15 @@ class ProviderMtlsIntegrationTest {
     private JdbcTemplate jdbc;
 
     private final List<UUID> inviteIds = new ArrayList<>();
+
+    @BeforeEach
+    void requireOpenSslOnWindows() {
+        if (System.getProperty("os.name", "").toLowerCase().contains("windows")) {
+            String openssl = System.getenv("HYPERLOOMS_TEST_OPENSSL");
+            Assumptions.assumeTrue(openssl != null && Files.isExecutable(Path.of(openssl)),
+                    "Set HYPERLOOMS_TEST_OPENSSL to an OpenSSL executable on Windows");
+        }
+    }
 
     @AfterEach
     void removeTestRecords() {
@@ -235,7 +243,8 @@ class ProviderMtlsIntegrationTest {
 
         private static void openssl(Path directory, String... args) throws Exception {
             List<String> command = new ArrayList<>();
-            command.add("openssl");
+            String openssl = System.getenv("HYPERLOOMS_TEST_OPENSSL");
+            command.add(openssl == null || openssl.isBlank() ? "openssl" : openssl);
             command.addAll(List.of(args));
             Process process = new ProcessBuilder(command).directory(directory.toFile())
                     .redirectErrorStream(true).start();

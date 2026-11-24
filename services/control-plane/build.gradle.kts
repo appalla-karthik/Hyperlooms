@@ -86,6 +86,7 @@ tasks.register<Test>("integrationTest") {
         includeTags("integration")
     }
     shouldRunAfter(tasks.test)
+    System.getenv("HYPERLOOMS_INTEGRATION_TEST_HEAP")?.let { maxHeapSize = it }
 }
 
 tasks.withType<JavaCompile> {

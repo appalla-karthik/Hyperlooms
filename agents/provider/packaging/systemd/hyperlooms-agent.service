@@ -1,0 +1,29 @@
+[Unit]
+Description=Hyperlooms Provider Agent
+Documentation=https://github.com/appalla-karthik/Hyperlooms
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hyperlooms-agent
+Group=hyperlooms-agent
+EnvironmentFile=/etc/hyperlooms-agent/agent.env
+ExecStart=/usr/local/bin/hyperlooms-agent
+Restart=on-failure
+RestartSec=5s
+WorkingDirectory=/var/lib/hyperlooms-agent
+StateDirectory=hyperlooms-agent
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Do not use PrivateDevices: the agent needs access to NVIDIA device nodes.
+
+[Install]
+WantedBy=multi-user.target

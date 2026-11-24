@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/status"
 )
 
 const shutdownTimeout = 5 * time.Second
@@ -16,6 +18,7 @@ type Server struct {
 	address string
 	logger  *slog.Logger
 	ready   atomic.Bool
+	state   *status.Store
 }
 
 type response struct {
@@ -23,22 +26,23 @@ type response struct {
 	Phase  string `json:"phase"`
 }
 
-func NewServer(address string, logger *slog.Logger) *Server {
-	return &Server{address: address, logger: logger}
+func NewServer(address string, logger *slog.Logger, shared ...*status.Store) *Server {
+	state := status.New("local-agent", "development", "", "")
+	if len(shared) != 0 && shared[0] != nil {
+		state = shared[0]
+	}
+	return &Server{address: address, logger: logger, state: state}
 }
 
 func (s *Server) SetReady(ready bool) {
 	s.ready.Store(ready)
+	s.state.SetReady(ready)
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health/live", s.live)
-	mux.HandleFunc("GET /health/ready", s.readiness)
-
 	httpServer := &http.Server{
 		Addr:              s.address,
-		Handler:           mux,
+		Handler:           s.handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

@@ -11,6 +11,7 @@ import (
 
 	agentv1 "github.com/appalla-karthik/Hyperlooms/agents/provider/gen/hyperlooms/agent/v1"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/config"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,13 +20,18 @@ import (
 const retryDelay = 10 * time.Second
 
 // Run reconnects outbound only. Readiness is false whenever no authenticated session exists.
-func Run(ctx context.Context, cfg config.Config, version string, logger *slog.Logger, setReady func(bool)) {
+func Run(ctx context.Context, cfg config.Config, version string, logger *slog.Logger, setReady func(bool), state *status.Store) {
 	for ctx.Err() == nil {
 		setReady(false)
-		if err := connectOnce(ctx, cfg, version, logger, setReady); err != nil && ctx.Err() == nil {
+		state.Connecting()
+		if err := connectOnce(ctx, cfg, version, logger, setReady, state); err != nil && ctx.Err() == nil {
+			state.Disconnected(err)
 			logger.Warn("agent session disconnected", "error", err)
 		}
 		setReady(false)
+		if ctx.Err() != nil {
+			state.Disconnected(nil)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -34,7 +40,7 @@ func Run(ctx context.Context, cfg config.Config, version string, logger *slog.Lo
 	}
 }
 
-func connectOnce(ctx context.Context, cfg config.Config, version string, logger *slog.Logger, setReady func(bool)) error {
+func connectOnce(ctx context.Context, cfg config.Config, version string, logger *slog.Logger, setReady func(bool), state *status.Store) error {
 	caPEM, err := os.ReadFile(cfg.ServerCA)
 	if err != nil {
 		return fmt.Errorf("read server CA: %w", err)
@@ -51,6 +57,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	if err != nil {
 		return err
 	}
+	state.ReportGPUs(StatusGPUs(gpus))
 	connection, err := grpc.NewClient(cfg.GrpcAddress, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 		MinVersion:   tls.VersionTLS13,
 		RootCAs:      roots,
@@ -94,6 +101,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 		return fmt.Errorf("invalid heartbeat interval from control plane")
 	}
 	setReady(true)
+	state.Connected()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var sequence uint64
@@ -124,6 +132,19 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 			if response.GetHeartbeatAcknowledgement() == nil || response.GetHeartbeatAcknowledgement().GetRequestMessageId() != requestID {
 				return fmt.Errorf("invalid heartbeat acknowledgement")
 			}
+			state.Heartbeat()
 		}
 	}
+}
+
+// StatusGPUs creates a local-console copy of a driver report.
+func StatusGPUs(gpus []*agentv1.GpuCapability) []status.GPU {
+	reported := make([]status.GPU, 0, len(gpus))
+	for _, gpu := range gpus {
+		reported = append(reported, status.GPU{
+			UUID: gpu.GetGpuUuid(), Model: gpu.GetModel(), VRAMBytes: gpu.GetVramBytes(),
+			DriverVersion: gpu.GetDriverVersion(), CUDAVersion: gpu.GetCudaVersion(),
+		})
+	}
+	return reported
 }

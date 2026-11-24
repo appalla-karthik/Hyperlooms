@@ -6,7 +6,7 @@ This first Phase 1 increment defines durable records and constraints, not an ope
 
 - `provider_nodes` stores a provider identity and enrollment/availability state. A claimed node ID must later be bound to its mTLS client certificate; an agent-supplied string is not proof of identity.
 - `provider_enrollment_invites` stores a one-time, short-lived, revocable invite digest. Its 256-bit bearer token is returned only when issued, never persisted in plaintext. Redeeming it creates a `PENDING/OFFLINE` node, not a verified provider.
-- `provider_certificates` binds a node to one current certificate fingerprint and expiry. Binding is an operator-side expectation; the node becomes `VERIFIED/OFFLINE` only when that exact certificate is presented through an authenticated mTLS session. Revocation disables the credential and node.
+- `provider_certificates` binds a node to one active certificate fingerprint and, during rotation, at most one staged replacement. Binding is an operator-side expectation; the node becomes `VERIFIED/OFFLINE` only when that exact certificate is presented through an authenticated mTLS session. Revocation disables the credential and node.
 - `provider_gpus` stores reported hardware separately from verification state. Reports are never schedulable solely because the agent sent them.
 - `workload_recipes` identifies an OCI repository and immutable SHA-256 digest, with explicit approval and resource ceilings.
 - `jobs` records the requester, recipe, state, request hash, and a requester-scoped idempotency key. The internal submission service now rejects a reused key with a different recipe or hash, and returns the same job for retries.
@@ -31,6 +31,8 @@ The database also limits one active attempt per job. Scheduler transactions must
 ## Protocol boundary
 
 `proto/hyperlooms/agent/v1/agent_session.proto` defines only a versioned agent hello, GPU capability report, and heartbeat exchange. It deliberately does not define job assignment or completion before the command/lease runtime is implemented. The control plane exposes a separate, disabled-by-default gRPC port with required mTLS and a 64 KiB inbound message cap. The Go agent can discover local NVIDIA GPUs and initiate the outbound stream when all TLS and node settings are supplied. Hello is required before heartbeats; wrong node identity, unsupported protocol, malformed reports, and non-increasing heartbeat sequences are rejected. Heartbeats update `last_seen_at` only and **do not** turn a reported GPU or node into schedulable capacity. Artifacts remain on the S3 data path. This transport has not yet been qualified in a live, cert-issued, database-backed, Linux NVIDIA test.
+
+The agent also serves a read-only console and status JSON on its local health port. Console routes require a loopback peer and Host header. They show locally discovered NVIDIA hardware, authenticated-session state, and bounded local connection/hardware events; they do not provide enrollment, private-key upload, workload controls, or public access. Local hardware discovery does not imply control-plane verification.
 
 ## Next implementation increment
 

@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/config"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/health"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/session"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/status"
 )
 
 var (
@@ -34,10 +36,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	server := health.NewServer(cfg.HealthAddress, logger)
+	state := status.New(cfg.AgentID, version, cfg.NodeID, cfg.GrpcAddress)
+	server := health.NewServer(cfg.HealthAddress, logger, state)
 	server.SetReady(cfg.GrpcAddress == "")
+	go probeHardware(ctx, state)
 	if cfg.GrpcAddress != "" {
-		go session.Run(ctx, cfg, version, logger, server.SetReady)
+		go session.Run(ctx, cfg, version, logger, server.SetReady, state)
 	}
 
 	logger.Info("provider agent foundation starting",
@@ -53,6 +57,24 @@ func main() {
 	}
 
 	logger.Info("provider agent stopped cleanly", "agent_id", cfg.AgentID)
+}
+
+func probeHardware(ctx context.Context, state *status.Store) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		gpus, err := session.DiscoverGPUs(ctx)
+		if err != nil {
+			state.HardwareFailed(err)
+		} else {
+			state.ReportGPUs(session.StatusGPUs(gpus))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func newLogger(levelName string) *slog.Logger {
