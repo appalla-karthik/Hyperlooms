@@ -33,6 +33,9 @@ class SchedulerClaimServiceIntegrationTest {
     private SchedulerClaimService claims;
 
     @Autowired
+    private LeaseExpiryService expirations;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @AfterEach
@@ -127,6 +130,88 @@ class SchedulerClaimServiceIntegrationTest {
         assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE id IN (?, ?) AND state = 'LEASED'",
                 firstJob, secondJob));
         assertEquals("BUSY", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+    }
+
+    @Test
+    void expiredLeaseMovesJobToRetryWaitAndQuarantinesNode() {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+
+        assertTrue(expirations.expireNext().isEmpty());
+        makeLeaseExpired(assignment.leaseId());
+        LeaseExpiration expired = expirations.expireNext().orElseThrow();
+
+        assertEquals(assignment.leaseId(), expired.leaseId());
+        assertEquals(assignment.fencingToken(), expired.fencingToken());
+        assertEquals("EXPIRED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
+        assertEquals("LEASE_EXPIRED", value("SELECT state FROM job_attempts WHERE id = ?",
+                assignment.attemptId()));
+        assertEquals("LEASE_TIMEOUT", value("SELECT failure_code FROM job_attempts WHERE id = ?",
+                assignment.attemptId()));
+        assertEquals("RETRY_WAIT", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_LEASE_EXPIRED'", jobId));
+        assertTrue(expirations.expireNext().isEmpty());
+        assertTrue(claims.claimNext().isEmpty());
+    }
+
+    @Test
+    void concurrentExpiryWorkersRecordOneTimeout() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        makeLeaseExpired(assignment.leaseId());
+        CountDownLatch start = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Optional<LeaseExpiration>> first = executor.submit(() -> {
+                start.await();
+                return expirations.expireNext();
+            });
+            Future<Optional<LeaseExpiration>> second = executor.submit(() -> {
+                start.await();
+                return expirations.expireNext();
+            });
+            start.countDown();
+            assertTrue(first.get().isPresent() != second.get().isPresent());
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_LEASE_EXPIRED'", jobId));
+    }
+
+    @Test
+    void expiringStrayLeaseDoesNotReopenCanceledJob() {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        jdbc.update("UPDATE job_attempts SET state = 'CANCELED', "
+                + "completed_at = CURRENT_TIMESTAMP WHERE id = ?", assignment.attemptId());
+        jdbc.update("UPDATE jobs SET state = 'CANCELED' WHERE id = ?", jobId);
+        makeLeaseExpired(assignment.leaseId());
+
+        assertTrue(expirations.expireNext().isPresent());
+        assertEquals("CANCELED", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("CANCELED", value("SELECT state FROM job_attempts WHERE id = ?",
+                assignment.attemptId()));
+        assertEquals("EXPIRED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
+        assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+    }
+
+    private void makeLeaseExpired(UUID leaseId) {
+        jdbc.update("""
+                UPDATE gpu_leases
+                SET issued_at = CURRENT_TIMESTAMP - INTERVAL '5 minutes',
+                    expires_at = CURRENT_TIMESTAMP - INTERVAL '1 minute'
+                WHERE id = ?
+                """, leaseId);
     }
 
     private UUID recipe(long minVram) {

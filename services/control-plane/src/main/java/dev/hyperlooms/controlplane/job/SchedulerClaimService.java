@@ -12,8 +12,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Claims at most one eligible queued job. There is deliberately no timer or
- * agent command yet: a lease is not useful until delivery and expiry recovery
- * are implemented and qualified together.
+ * agent command yet: claim and expiry reconciliation must be wired to a
+ * qualified delivery/fencing protocol before this can execute workloads.
  */
 @Service
 public class SchedulerClaimService {

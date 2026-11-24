@@ -1,6 +1,6 @@
 # Phase 1 Execution Core
 
-Phase 1 now has durable records and an internal, transactional scheduler claim. It is not an operational GPU scheduler: no worker invokes the claim, no agent assignment command exists, and lease expiry/recovery is not implemented.
+Phase 1 now has durable records, an internal transactional scheduler claim, and an internal lease-expiry reconciliation transaction. It is not an operational GPU scheduler: no worker invokes either service, no agent assignment command exists, and remote process shutdown or stale-result rejection is not yet proven.
 
 ## Records
 
@@ -12,9 +12,9 @@ Phase 1 now has durable records and an internal, transactional scheduler claim. 
 - `jobs` records the requester, recipe, state, request hash, and a requester-scoped idempotency key. The internal submission service now rejects a reused key with a different recipe or hash, and returns the same job for retries.
 - `job_attempts` preserves each execution attempt. Retry creates a higher attempt number rather than erasing prior evidence.
 - `gpu_leases` has an expiry and database-issued, monotonic fencing token. A partial unique index permits at most one active lease per `(node_id, gpu_uuid)`. A completion from an old token must later be rejected even if the old process kept running.
-- `outbox_events` is written in the same transaction as initial job creation and lease claim. No dispatcher is implemented yet.
+- `outbox_events` is written in the same transaction as initial job creation, lease claim, and lease expiry. No dispatcher is implemented yet.
 
-The database also limits one active attempt per job. `SchedulerClaimService` now atomically locks a queued job with `SKIP LOCKED`, checks an approved recipe and a fresh, verified, certificate-backed, explicitly `AVAILABLE` provider, then locks its GPU and node before creating the attempt, two-minute lease, fencing token, `JOB_LEASED` outbox event, and `LEASED`/`BUSY` states. It enforces recipe minimum VRAM and one active job per provider node. A competing claim leaves the losing job queued. The claim service is internal and has no polling caller; the current system has no safe path to make a node `AVAILABLE` or a job `QUEUED` from an authenticated public request. Expiry recovery, lease renewal, fencing checks on result completion, and delivery to the agent remain required before activating it. Live PostgreSQL integration tests cover eligibility and concurrent claims. The schema smoke separately tests migration constraints inside a rolled-back transaction.
+The database also limits one active attempt per job. `SchedulerClaimService` atomically locks a queued job with `SKIP LOCKED`, checks an approved recipe and a fresh, verified, certificate-backed, explicitly `AVAILABLE` provider, then locks its GPU and node before creating the attempt, two-minute lease, fencing token, `JOB_LEASED` outbox event, and `LEASED`/`BUSY` states. It enforces recipe minimum VRAM and one active job per provider node. A competing claim leaves the losing job queued. `LeaseExpiryService` locks one overdue active lease and its related records with `SKIP LOCKED`, marks the lease expired, marks an active attempt `LEASE_EXPIRED`, moves an active job to `RETRY_WAIT`, takes the provider `OFFLINE`, and emits `JOB_LEASE_EXPIRED`. It never automatically retries or declares the GPU safe to reuse; a terminal attempt/job is not reopened. Neither service has a polling caller, and the current system has no safe path to make a node `AVAILABLE` or a job `QUEUED` from an authenticated public request. Lease renewal, a recovery worker, fencing checks on result completion, and delivery to the agent remain required before activation. Live PostgreSQL integration tests cover eligibility, concurrent claims, expiry, and duplicate expiry workers. The schema smoke separately tests migration constraints inside a rolled-back transaction.
 
 ## Provider enrollment boundary
 
