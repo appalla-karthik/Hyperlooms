@@ -1,6 +1,6 @@
 # Phase 1 Execution Core
 
-This first Phase 1 increment defines durable records and constraints, not an operational GPU scheduler.
+Phase 1 now has durable records and an internal, transactional scheduler claim. It is not an operational GPU scheduler: no worker invokes the claim, no agent assignment command exists, and lease expiry/recovery is not implemented.
 
 ## Records
 
@@ -12,9 +12,9 @@ This first Phase 1 increment defines durable records and constraints, not an ope
 - `jobs` records the requester, recipe, state, request hash, and a requester-scoped idempotency key. The internal submission service now rejects a reused key with a different recipe or hash, and returns the same job for retries.
 - `job_attempts` preserves each execution attempt. Retry creates a higher attempt number rather than erasing prior evidence.
 - `gpu_leases` has an expiry and database-issued, monotonic fencing token. A partial unique index permits at most one active lease per `(node_id, gpu_uuid)`. A completion from an old token must later be rejected even if the old process kept running.
-- `outbox_events` is written in the same transaction as initial job creation. No dispatcher is implemented yet.
+- `outbox_events` is written in the same transaction as initial job creation and lease claim. No dispatcher is implemented yet.
 
-The database also limits one active attempt per job. Scheduler transactions must atomically claim a queued job, create its attempt and lease, and update its state; these application operations are not yet implemented. The live PostgreSQL CI smoke tests the migration, idempotency uniqueness, exclusive lease, fencing sequence, and outbox insertion inside a rolled-back transaction. A separate live-database integration test exercises approved-recipe submission, retries, conflicts, and concurrent duplicate requests.
+The database also limits one active attempt per job. `SchedulerClaimService` now atomically locks a queued job with `SKIP LOCKED`, checks an approved recipe and a fresh, verified, certificate-backed, explicitly `AVAILABLE` provider, then locks its GPU and node before creating the attempt, two-minute lease, fencing token, `JOB_LEASED` outbox event, and `LEASED`/`BUSY` states. It enforces recipe minimum VRAM and one active job per provider node. A competing claim leaves the losing job queued. The claim service is internal and has no polling caller; the current system has no safe path to make a node `AVAILABLE` or a job `QUEUED` from an authenticated public request. Expiry recovery, lease renewal, fencing checks on result completion, and delivery to the agent remain required before activating it. Live PostgreSQL integration tests cover eligibility and concurrent claims. The schema smoke separately tests migration constraints inside a rolled-back transaction.
 
 ## Provider enrollment boundary
 
@@ -26,13 +26,15 @@ The database also limits one active attempt per job. Scheduler transactions must
 
 ## Submission boundary
 
-`JobSubmissionService` is deliberately internal: it accepts a trusted requester subject, an approved recipe ID, a caller-generated idempotency key, and a canonical request SHA-256. It commits a `CREATED` job and `JOB_CREATED` outbox event together. `CREATED` is not schedulable: inputs, authentication, artifact access, and the transition to `QUEUED` are not implemented yet. No public job API is exposed until a real authenticated subject can be bound to the request. The caller must compute the hash over a documented canonical request representation; that representation will be fixed with the authenticated API contract.
+`JobSubmissionService` is deliberately internal: it accepts a trusted requester subject, an approved recipe ID, a caller-generated idempotency key, and a canonical request SHA-256. It commits a `CREATED` job and `JOB_CREATED` outbox event together. `CREATED` is not schedulable: inputs, authentication, artifact access, and the transition to `QUEUED` are not implemented yet. Scheduler tests insert `QUEUED` fixtures directly; this is not a production queueing path. No public job API is exposed until a real authenticated subject can be bound to the request. The caller must compute the hash over a documented canonical request representation; that representation will be fixed with the authenticated API contract.
 
 ## Protocol boundary
 
-`proto/hyperlooms/agent/v1/agent_session.proto` defines only a versioned agent hello, GPU capability report, and heartbeat exchange. It deliberately does not define job assignment or completion before the command/lease runtime is implemented. The control plane exposes a separate, disabled-by-default gRPC port with required mTLS and a 64 KiB inbound message cap. The Go agent can discover local NVIDIA GPUs and initiate the outbound stream when all TLS and node settings are supplied. Hello is required before heartbeats; wrong node identity, unsupported protocol, malformed reports, and non-increasing heartbeat sequences are rejected. Heartbeats update `last_seen_at` only and **do not** turn a reported GPU or node into schedulable capacity. Artifacts remain on the S3 data path. This transport has not yet been qualified in a live, cert-issued, database-backed, Linux NVIDIA test.
+`proto/hyperlooms/agent/v1/agent_session.proto` defines only a versioned agent hello, GPU capability report, and heartbeat exchange. It deliberately does not define job assignment or completion before the command/lease runtime is implemented. The control plane exposes a separate, disabled-by-default gRPC port with required mTLS and a 64 KiB inbound message cap. The Go agent can discover local NVIDIA GPUs and initiate the outbound stream when all TLS and node settings are supplied. Hello is required before heartbeats; wrong node identity, unsupported protocol, malformed reports, and non-increasing heartbeat sequences are rejected. Heartbeats update `last_seen_at` only and **do not** turn a reported GPU or node into schedulable capacity. Artifacts remain on the S3 data path. Real-certificate, database-backed mTLS tests passed locally on Windows with OpenSSL; a real Linux NVIDIA host test is still required.
 
-The agent also serves a read-only console and status JSON on its local health port. Console routes require a loopback peer and Host header. They show locally discovered NVIDIA hardware, authenticated-session state, and bounded local connection/hardware events; they do not provide enrollment, private-key upload, workload controls, or public access. Local hardware discovery does not imply control-plane verification.
+The provider product is installable software on a supported host, with a background Go service and an embedded local browser console; it is not a hosted web service that can access a stranger's GPU by itself. The separate requester/operator dashboard and control plane are hosted services. The agent initiates outbound mTLS connections, so contributors should not need to expose the console to the public internet. The eventual customer package needs a signed installer, supported updates, service management, and a safe first-run enrollment path; none is complete yet.
+
+The agent currently serves a read-only console and status JSON on its local health port. Console routes require a loopback peer and Host header. They show locally discovered NVIDIA hardware, authenticated-session state, and bounded local connection/hardware events; they do not provide enrollment, private-key upload, workload controls, or public access. Local hardware discovery does not imply control-plane verification.
 
 ## Next implementation increment
 

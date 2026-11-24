@@ -14,7 +14,7 @@ function renderGPU(gpu) {
   id.textContent = gpu.uuid;
   const spec = document.createElement("div");
   spec.className = "gpu-spec";
-  spec.textContent = `${(gpu.vramBytes / 1073741824).toFixed(1)} GiB VRAM · Driver ${gpu.driverVersion} · CUDA ${gpu.cudaVersion}`;
+  spec.textContent = `${(gpu.vramBytes / 1073741824).toFixed(1)} GiB VRAM / Driver ${gpu.driverVersion} / CUDA ${gpu.cudaVersion}`;
   info.append(name, id, spec);
   const badge = document.createElement("span");
   badge.className = "gpu-status";
@@ -26,12 +26,12 @@ function renderGPU(gpu) {
 function render(data) {
   const connection = data.connection.replaceAll("_", " ");
   set("connection-label", connection === "not configured" ? "Not configured" : connection.charAt(0).toUpperCase() + connection.slice(1));
-  byId("connection-badge").className = `status-badge ${data.connection === "disconnected" ? "disconnected" : data.connection === "not_configured" ? "not-configured" : ""}`;
+  byId("connection-badge").className = `status-badge ${data.connection === "disconnected" ? "disconnected" : data.connection === "not_configured" ? "not-configured" : data.connection === "connected" ? "connected" : ""}`;
   set("agent-id", data.agentId);
   set("agent-version", `Version ${data.version}`);
   set("node-id", data.nodeId || "Not enrolled");
   set("control-plane", data.controlPlane || "Not configured");
-  set("readiness", data.connection === "not_configured" ? "Local service only" : data.ready ? "Connected" : "Not ready");
+  set("readiness", data.connection === "not_configured" ? "Local service only" : data.ready && data.connection === "connected" ? "Connected" : "Not ready");
   set("last-connected", date(data.lastConnected));
   set("heartbeat-detail", date(data.lastHeartbeat));
   set("last-heartbeat", data.lastHeartbeat ? `Heartbeat ${date(data.lastHeartbeat)}` : "No heartbeat yet");
@@ -51,7 +51,7 @@ function render(data) {
 
   const diagnostic = byId("diagnostic");
   diagnostic.hidden = !data.lastError && !data.hardwareError;
-  set("diagnostic-message", [data.lastError, data.hardwareError].filter(Boolean).join(" · "));
+  set("diagnostic-message", [data.lastError, data.hardwareError].filter(Boolean).join(" / "));
   const events = byId("event-list");
   events.replaceChildren();
   const recent = Array.isArray(data.events) ? data.events.slice(-8).reverse() : [];
@@ -85,16 +85,33 @@ function render(data) {
       : "The agent is retrying its outbound secure connection. Check the diagnostic above, certificate paths, network reachability, and NVIDIA discovery.");
 }
 
+let refreshing = false;
 async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
+  byId("refresh-button").disabled = true;
   try {
     const response = await fetch("/api/status", { cache: "no-store" });
     if (!response.ok) throw new Error(`Status request failed (${response.status})`);
     render(await response.json());
+    set("last-updated", `Updated ${new Date().toLocaleTimeString()}`);
   } catch {
     set("connection-label", "Console offline");
     byId("connection-badge").className = "status-badge disconnected";
+    set("last-updated", "Status could not be refreshed");
+  } finally {
+    refreshing = false;
+    byId("refresh-button").disabled = false;
   }
 }
 
+byId("refresh-button").addEventListener("click", refresh);
+const navLinks = [...document.querySelectorAll(".nav-link")];
+function updateActiveLink() {
+  const selected = navLinks.find((link) => link.hash === window.location.hash) || navLinks[0];
+  navLinks.forEach((link) => link.classList.toggle("active", link === selected));
+}
+window.addEventListener("hashchange", updateActiveLink);
+updateActiveLink();
 refresh();
 setInterval(refresh, 3000);
