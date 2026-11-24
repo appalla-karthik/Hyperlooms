@@ -17,11 +17,51 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V4 provider certificate schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '5' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V5 staged certificate rotation schema was not applied';
+    END IF;
 END;
 $$;
 
 INSERT INTO provider_nodes (id, owner_subject, enrollment_state)
 VALUES ('00000000-0000-4000-8000-000000000101', 'phase-one-test', 'VERIFIED');
+
+INSERT INTO provider_certificates
+    (id, node_id, certificate_sha256, not_after, activated_at)
+VALUES
+    ('00000000-0000-4000-8000-000000000111',
+     '00000000-0000-4000-8000-000000000101', repeat('e', 64),
+     CURRENT_TIMESTAMP + INTERVAL '1 day', CURRENT_TIMESTAMP),
+    ('00000000-0000-4000-8000-000000000112',
+     '00000000-0000-4000-8000-000000000101', repeat('f', 64),
+     CURRENT_TIMESTAMP + INTERVAL '1 day', NULL);
+
+DO $$
+BEGIN
+    BEGIN
+        INSERT INTO provider_certificates
+            (id, node_id, certificate_sha256, not_after, activated_at)
+        VALUES ('00000000-0000-4000-8000-000000000113',
+                '00000000-0000-4000-8000-000000000101', repeat('1', 64),
+                CURRENT_TIMESTAMP + INTERVAL '1 day', NULL);
+        RAISE EXCEPTION 'second staged certificate was accepted';
+    EXCEPTION WHEN unique_violation THEN
+        NULL;
+    END;
+    BEGIN
+        INSERT INTO provider_certificates
+            (id, node_id, certificate_sha256, not_after, activated_at)
+        VALUES ('00000000-0000-4000-8000-000000000114',
+                '00000000-0000-4000-8000-000000000101', repeat('2', 64),
+                CURRENT_TIMESTAMP + INTERVAL '1 day', CURRENT_TIMESTAMP);
+        RAISE EXCEPTION 'second active certificate was accepted';
+    EXCEPTION WHEN unique_violation THEN
+        NULL;
+    END;
+END;
+$$;
 
 INSERT INTO provider_gpus (
     node_id, gpu_uuid, model, vram_bytes, driver_version, cuda_version,

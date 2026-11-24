@@ -24,6 +24,15 @@ public class ProviderCapabilityService {
         this.identities = identities;
     }
 
+    /** Activate the bound certificate and persist hello as one database transaction. */
+    public void acceptHelloFromAuthenticatedPeer(
+            ProviderPeerIdentity peer, ProviderCapabilityReport report) {
+        transactions.executeWithoutResult(status -> {
+            identities.activateFromAuthenticatedPeer(peer);
+            recordFromAuthenticatedPeer(peer, report);
+        });
+    }
+
     /** Call only after the transport has authenticated the presented mTLS peer certificate. */
     public void recordFromAuthenticatedPeer(
             ProviderPeerIdentity peer, ProviderCapabilityReport report) {
@@ -92,6 +101,21 @@ public class ProviderCapabilityService {
                         jsonb_build_object('nodeId', CAST(? AS text), 'gpuCount', ?))
                     """, eventId, "provider-node:" + peer.nodeId() + ":report:" + eventId,
                     peer.nodeId(), peer.nodeId(), report.gpus().size());
+        });
+    }
+
+    /** Heartbeats prove liveness only; reported availability is not scheduling eligibility. */
+    public void recordHeartbeatFromAuthenticatedPeer(ProviderPeerIdentity peer) {
+        if (peer == null) {
+            throw new ProviderIdentityDeniedException();
+        }
+        transactions.executeWithoutResult(status -> {
+            identities.requireActivePeerLocked(peer);
+            jdbc.update("""
+                    UPDATE provider_nodes
+                    SET last_seen_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """, peer.nodeId());
         });
     }
 

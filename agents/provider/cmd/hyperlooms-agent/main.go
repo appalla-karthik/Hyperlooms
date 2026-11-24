@@ -10,6 +10,7 @@ import (
 
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/config"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/health"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/session"
 )
 
 var (
@@ -34,14 +35,17 @@ func main() {
 	defer stop()
 
 	server := health.NewServer(cfg.HealthAddress, logger)
-	server.SetReady(true)
+	server.SetReady(cfg.GrpcAddress == "")
+	if cfg.GrpcAddress != "" {
+		go session.Run(ctx, cfg, version, logger, server.SetReady)
+	}
 
 	logger.Info("provider agent foundation starting",
 		"agent_id", cfg.AgentID,
 		"version", version,
 		"commit", commit,
 		"health_address", cfg.HealthAddress,
-		"phase", "foundation")
+		"phase", "phase-one-agent-session")
 
 	if err := server.Run(ctx); err != nil {
 		logger.Error("provider agent stopped unexpectedly", "error", err)

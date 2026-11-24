@@ -1,8 +1,8 @@
 # Agent Protocol Contracts
 
-This directory will own versioned Protobuf contracts between the Spring Boot control plane and Go provider agents.
+This directory owns versioned Protobuf contracts between the Spring Boot control plane and Go provider agents.
 
-The first Phase 1 contract is `hyperlooms/agent/v1/agent_session.proto`. It defines a bidirectional agent session for hello and heartbeat only. It is linted and built in CI, but neither the Java server nor Go agent is wired to it yet. Job assignment/completion messages will be added when the lease runtime is implemented.
+The first Phase 1 contract is `hyperlooms/agent/v1/agent_session.proto`. It defines a bidirectional agent session for hello and heartbeat only. The Java server generates its stubs during Gradle builds; the Go stubs are generated with the pinned plugins in `buf.gen.yaml`. Job assignment/completion messages will be added when the lease runtime is implemented.
 
 Protocol rules:
 
@@ -14,4 +14,4 @@ Protocol rules:
 - no secrets in logs or generic metadata maps;
 - breaking-change checks against the main-branch baseline when the contract becomes active.
 
-Run `buf lint` and `buf build` from this directory. Agent-reported GPU claims stay unverified until the control plane checks them and binds the node ID to an mTLS identity.
+Run `buf lint`, `buf build`, and `buf generate` from this directory after contract changes. Commit regenerated Go stubs. Agent-reported GPU claims stay unverified until the control plane verifies hardware; mTLS identity alone is not enough.

@@ -2,7 +2,7 @@
 
 Community-owned, verifiable GPU compute for AI workloads.
 
-> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema and initial agent protocol are being introduced, but the repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
+> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema and an opt-in, certificate-authenticated agent hello/heartbeat path exist, but certificate issuance and live end-to-end qualification are pending. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
 
 HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
 
@@ -99,7 +99,7 @@ cd apps/web
 pnpm install --frozen-lockfile
 pnpm dev
 
-# Run the provider-agent foundation in another terminal
+# Run provider-agent health mode in another terminal (no network session by default)
 cd agents/provider
 go run ./cmd/hyperlooms-agent
 ```
@@ -114,6 +114,8 @@ Local endpoints:
 - SeaweedFS Admin UI: `http://localhost:9001`
 - Provider-agent health: `http://127.0.0.1:9091/health/live`
 
+The Phase 1 agent gRPC listener is disabled by default. Enabling it requires an operator-issued CA, server certificate/key, a bound provider client certificate, and the corresponding `.env.example` settings. The agent also needs a Linux NVIDIA host with `nvidia-smi`; it does not execute jobs yet. Build the control-plane Docker image from the repository root so Gradle can access the shared protocol: `docker build -f services/control-plane/Dockerfile .`.
+
 ## Documentation
 
 - [Product vision](docs/product/vision.md)
@@ -123,6 +125,7 @@ Local endpoints:
 - [Job lifecycle](docs/architecture/job-lifecycle.md)
 - [Execution-core invariants](docs/architecture/execution-core.md)
 - [Threat model](docs/security/threat-model.md)
+- [Provider identity operations](docs/security/provider-identity-operations.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Testing strategy](docs/development/testing-strategy.md)

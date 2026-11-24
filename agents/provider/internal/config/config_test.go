@@ -28,3 +28,19 @@ func TestLoadReadsEnvironment(t *testing.T) {
 		t.Fatalf("unexpected log level: %s", cfg.LogLevel)
 	}
 }
+
+func TestLoadRequiresCompleteGrpcCredentials(t *testing.T) {
+	t.Setenv("HYPERLOOMS_AGENT_GRPC_ADDRESS", "localhost:9090")
+	t.Setenv("HYPERLOOMS_AGENT_NODE_ID", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected missing gRPC credentials to fail")
+	}
+}
+
+func TestLoadRejectsCredentialsWithoutAddress(t *testing.T) {
+	t.Setenv("HYPERLOOMS_AGENT_GRPC_ADDRESS", "")
+	t.Setenv("HYPERLOOMS_AGENT_CLIENT_KEY", "client.key")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected incomplete gRPC configuration to fail")
+	}
+}

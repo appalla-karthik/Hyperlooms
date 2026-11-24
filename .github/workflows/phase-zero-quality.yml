@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: agents/provider/go.mod
-          cache-dependency-path: agents/provider/go.mod
+          cache-dependency-path: agents/provider/go.sum
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race -cover ./...
@@ -90,6 +90,9 @@ jobs:
         working-directory: proto
       - run: buf build
         working-directory: proto
+      - run: buf generate
+        working-directory: proto
+      - run: test -z "$(git status --porcelain -- agents/provider/gen)"
 
   foundation-smoke:
     name: Live PostgreSQL and S3 smoke

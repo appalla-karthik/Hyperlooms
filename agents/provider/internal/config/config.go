@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -13,10 +14,17 @@ const (
 	defaultLogLevel      = "INFO"
 )
 
+var canonicalNodeID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 type Config struct {
 	AgentID       string
 	HealthAddress string
 	LogLevel      string
+	GrpcAddress   string
+	NodeID        string
+	ServerCA      string
+	ClientCert    string
+	ClientKey     string
 }
 
 func Load() (Config, error) {
@@ -24,6 +32,11 @@ func Load() (Config, error) {
 		AgentID:       valueOrDefault("HYPERLOOMS_AGENT_ID", defaultAgentID),
 		HealthAddress: valueOrDefault("HYPERLOOMS_AGENT_HEALTH_ADDRESS", defaultHealthAddress),
 		LogLevel:      valueOrDefault("HYPERLOOMS_LOG_LEVEL", defaultLogLevel),
+		GrpcAddress:   valueOrDefault("HYPERLOOMS_AGENT_GRPC_ADDRESS", ""),
+		NodeID:        valueOrDefault("HYPERLOOMS_AGENT_NODE_ID", ""),
+		ServerCA:      valueOrDefault("HYPERLOOMS_AGENT_SERVER_CA", ""),
+		ClientCert:    valueOrDefault("HYPERLOOMS_AGENT_CLIENT_CERT", ""),
+		ClientKey:     valueOrDefault("HYPERLOOMS_AGENT_CLIENT_KEY", ""),
 	}
 
 	if strings.TrimSpace(cfg.AgentID) == "" {
@@ -31,6 +44,20 @@ func Load() (Config, error) {
 	}
 	if _, _, err := net.SplitHostPort(cfg.HealthAddress); err != nil {
 		return Config{}, fmt.Errorf("invalid HYPERLOOMS_AGENT_HEALTH_ADDRESS: %w", err)
+	}
+	if cfg.GrpcAddress != "" {
+		host, _, err := net.SplitHostPort(cfg.GrpcAddress)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid HYPERLOOMS_AGENT_GRPC_ADDRESS: %w", err)
+		}
+		if host == "" {
+			return Config{}, fmt.Errorf("HYPERLOOMS_AGENT_GRPC_ADDRESS requires a host")
+		}
+		if !canonicalNodeID.MatchString(cfg.NodeID) || cfg.ServerCA == "" || cfg.ClientCert == "" || cfg.ClientKey == "" {
+			return Config{}, fmt.Errorf("agent gRPC requires node ID, server CA, client certificate and key")
+		}
+	} else if cfg.NodeID != "" || cfg.ServerCA != "" || cfg.ClientCert != "" || cfg.ClientKey != "" {
+		return Config{}, fmt.Errorf("agent gRPC address is required when credentials are configured")
 	}
 
 	return cfg, nil

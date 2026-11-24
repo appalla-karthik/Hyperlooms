@@ -43,6 +43,41 @@ public class ProviderIdentityService {
         });
     }
 
+    /** Stage a replacement without interrupting the currently active certificate. */
+    public void stageReplacementCertificate(UUID nodeId, X509Certificate certificate) {
+        ProviderPeerIdentity identity = ProviderPeerIdentity.fromCertificate(certificate);
+        if (nodeId == null || !nodeId.equals(identity.nodeId())) {
+            throw new ProviderIdentityDeniedException();
+        }
+        transactions.executeWithoutResult(status -> {
+            List<String> states = jdbc.queryForList(
+                    "SELECT enrollment_state FROM provider_nodes WHERE id = ? FOR UPDATE",
+                    String.class, nodeId);
+            if (states.size() != 1 || !"VERIFIED".equals(states.get(0))) {
+                throw new ProviderIdentityDeniedException();
+            }
+            Integer activeCount = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM provider_certificates
+                    WHERE node_id = ? AND activated_at IS NOT NULL AND revoked_at IS NULL
+                    """, Integer.class, nodeId);
+            if (activeCount == null || activeCount != 1) {
+                throw new ProviderIdentityDeniedException();
+            }
+            // A superseded staged certificate must no longer be able to activate.
+            jdbc.update("""
+                    UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP
+                    WHERE node_id = ? AND activated_at IS NULL AND revoked_at IS NULL
+                    """, nodeId);
+            jdbc.update("""
+                    INSERT INTO provider_certificates
+                        (id, node_id, certificate_sha256, not_after)
+                    VALUES (?, ?, ?, ?)
+                    """, UUID.randomUUID(), nodeId, identity.certificateSha256(),
+                    Timestamp.from(identity.notAfter()));
+            writeNodeEvent(nodeId, "PROVIDER_CERTIFICATE_STAGED");
+        });
+    }
+
     /** Call only with the peer certificate from a successfully authenticated mTLS session. */
     public UUID activateFromAuthenticatedPeer(ProviderPeerIdentity peer) {
         if (peer == null) {
@@ -54,6 +89,26 @@ public class ProviderIdentityService {
                 throw new ProviderIdentityDeniedException();
             }
             if ("VERIFIED".equals(credential.nodeState()) && credential.activated()) {
+                return peer.nodeId();
+            }
+            if ("VERIFIED".equals(credential.nodeState()) && !credential.activated()) {
+                int revoked = jdbc.update("""
+                        UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP
+                        WHERE node_id = ? AND activated_at IS NOT NULL AND revoked_at IS NULL
+                        """, peer.nodeId());
+                if (revoked != 1) {
+                    throw new ProviderIdentityDeniedException();
+                }
+                jdbc.update("""
+                        UPDATE provider_certificates SET activated_at = CURRENT_TIMESTAMP
+                        WHERE node_id = ? AND certificate_sha256 = ? AND activated_at IS NULL
+                        """, peer.nodeId(), peer.certificateSha256());
+                jdbc.update("""
+                        UPDATE provider_nodes
+                        SET availability_state = 'OFFLINE', updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """, peer.nodeId());
+                writeNodeEvent(peer.nodeId(), "PROVIDER_CERTIFICATE_ROTATED");
                 return peer.nodeId();
             }
             if (!"PENDING".equals(credential.nodeState()) || credential.activated()) {
@@ -142,12 +197,13 @@ public class ProviderIdentityService {
     }
 
     private void writeNodeEvent(UUID nodeId, String eventType) {
+        UUID eventId = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO outbox_events
                     (id, event_key, aggregate_type, aggregate_id, event_type, payload)
                 VALUES (?, ?, 'PROVIDER_NODE', ?, ?,
                     jsonb_build_object('nodeId', CAST(? AS text)))
-                """, UUID.randomUUID(), "provider-node:" + nodeId + ":" + eventType,
+                """, eventId, "provider-node:" + nodeId + ":" + eventType + ":" + eventId,
                 nodeId, eventType, nodeId);
     }
 

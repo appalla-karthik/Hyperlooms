@@ -51,3 +51,11 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
+
+hyperlooms:
+  agent-grpc:
+    enabled: ${HYPERLOOMS_AGENT_GRPC_ENABLED:false}
+    port: ${HYPERLOOMS_AGENT_GRPC_PORT:9090}
+    certificate: ${HYPERLOOMS_AGENT_GRPC_CERTIFICATE:}
+    private-key: ${HYPERLOOMS_AGENT_GRPC_PRIVATE_KEY:}
+    client-ca: ${HYPERLOOMS_AGENT_GRPC_CLIENT_CA:}

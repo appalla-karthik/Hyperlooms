@@ -1,0 +1,16 @@
+# The control-plane image uses repository-root context for the shared protocol.
+# Keep local secrets, Git data, the dashboard, and build output out of that context.
+**
+!services/
+!services/control-plane/
+!services/control-plane/**
+!proto/
+!proto/**
+services/control-plane/.gradle
+services/control-plane/build
+services/control-plane/hs_err_*
+services/control-plane/*.log
+**/.env*
+**/*.key
+**/*.pem
+**/node_modules

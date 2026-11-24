@@ -99,6 +99,11 @@ class ProviderIdentityCapabilityIntegrationTest {
         assertEquals("OFFLINE", jdbc.queryForObject(
                 "SELECT availability_state FROM provider_nodes WHERE id = ?", String.class, nodeId));
 
+        jdbc.update("UPDATE provider_nodes SET last_seen_at = NULL WHERE id = ?", nodeId);
+        capabilities.recordHeartbeatFromAuthenticatedPeer(peer);
+        assertEquals(1L, count("SELECT COUNT(*) FROM provider_nodes "
+                + "WHERE id = ? AND last_seen_at IS NOT NULL AND availability_state = 'OFFLINE'", nodeId));
+
         jdbc.update("""
                 UPDATE provider_gpus SET verification_state = 'VERIFIED', verified_at = CURRENT_TIMESTAMP
                 WHERE node_id = ?
@@ -121,6 +126,8 @@ class ProviderIdentityCapabilityIntegrationTest {
         assertEquals("REJECTED", gpuState(nodeId, "GPU-1"));
         assertThrows(ProviderIdentityDeniedException.class,
                 () -> capabilities.recordFromAuthenticatedPeer(peer, report(nodeId, gpu1)));
+        assertThrows(ProviderIdentityDeniedException.class,
+                () -> capabilities.recordHeartbeatFromAuthenticatedPeer(peer));
     }
 
     @Test
@@ -131,6 +138,81 @@ class ProviderIdentityCapabilityIntegrationTest {
         assertThrows(ProviderIdentityDeniedException.class,
                 () -> identities.bindExpectedCertificate(nodeId, wrong));
         assertEquals(0L, count("SELECT COUNT(*) FROM provider_certificates WHERE node_id = ?", nodeId));
+    }
+
+    @Test
+    void stagedRotationKeepsOldCredentialUntilReplacementAuthenticates() throws Exception {
+        UUID nodeId = pendingNode();
+        X509Certificate original = certificate(nodeId, "original");
+        ProviderPeerIdentity oldPeer = ProviderPeerIdentity.fromCertificate(original);
+        identities.bindExpectedCertificate(nodeId, original);
+        identities.activateFromAuthenticatedPeer(oldPeer);
+
+        X509Certificate replacement = certificate(nodeId, "replacement");
+        ProviderPeerIdentity newPeer = ProviderPeerIdentity.fromCertificate(replacement);
+        identities.stageReplacementCertificate(nodeId, replacement);
+        assertEquals(2L, count("SELECT COUNT(*) FROM provider_certificates "
+                + "WHERE node_id = ? AND revoked_at IS NULL", nodeId));
+        capabilities.recordHeartbeatFromAuthenticatedPeer(oldPeer);
+
+        identities.activateFromAuthenticatedPeer(newPeer);
+        assertEquals(1L, count("SELECT COUNT(*) FROM provider_certificates "
+                + "WHERE node_id = ? AND revoked_at IS NULL AND activated_at IS NOT NULL", nodeId));
+        assertEquals(0L, count("SELECT COUNT(*) FROM provider_certificates "
+                + "WHERE node_id = ? AND revoked_at IS NULL AND activated_at IS NULL", nodeId));
+        assertThrows(ProviderIdentityDeniedException.class,
+                () -> capabilities.recordHeartbeatFromAuthenticatedPeer(oldPeer));
+        capabilities.recordHeartbeatFromAuthenticatedPeer(newPeer);
+        assertEquals("VERIFIED/OFFLINE", jdbc.queryForObject("""
+                SELECT enrollment_state || '/' || availability_state
+                FROM provider_nodes WHERE id = ?
+                """, String.class, nodeId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'PROVIDER_CERTIFICATE_ROTATED'", nodeId));
+    }
+
+    @Test
+    void failedReplacementHelloDoesNotCutOffTheActiveCertificate() throws Exception {
+        UUID nodeId = pendingNode();
+        X509Certificate original = certificate(nodeId, "original");
+        ProviderPeerIdentity oldPeer = ProviderPeerIdentity.fromCertificate(original);
+        identities.bindExpectedCertificate(nodeId, original);
+        identities.activateFromAuthenticatedPeer(oldPeer);
+
+        X509Certificate replacement = certificate(nodeId, "replacement");
+        ProviderPeerIdentity newPeer = ProviderPeerIdentity.fromCertificate(replacement);
+        identities.stageReplacementCertificate(nodeId, replacement);
+
+        assertThrows(ProviderIdentityDeniedException.class,
+                () -> capabilities.acceptHelloFromAuthenticatedPeer(newPeer,
+                        report(UUID.randomUUID(), gpu("GPU-1", 8589934592L))));
+        capabilities.recordHeartbeatFromAuthenticatedPeer(oldPeer);
+        assertEquals(1L, count("SELECT COUNT(*) FROM provider_certificates "
+                + "WHERE node_id = ? AND revoked_at IS NULL AND activated_at IS NOT NULL", nodeId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM provider_certificates "
+                + "WHERE node_id = ? AND revoked_at IS NULL AND activated_at IS NULL", nodeId));
+        assertEquals(0L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'PROVIDER_CERTIFICATE_ROTATED'", nodeId));
+    }
+
+    @Test
+    void restagingAndEmergencyRevocationInvalidateUnusedCertificates() throws Exception {
+        UUID nodeId = pendingNode();
+        X509Certificate original = certificate(nodeId, "original");
+        identities.bindExpectedCertificate(nodeId, original);
+        identities.activateFromAuthenticatedPeer(ProviderPeerIdentity.fromCertificate(original));
+
+        X509Certificate discarded = certificate(nodeId, "discarded");
+        identities.stageReplacementCertificate(nodeId, discarded);
+        X509Certificate replacement = certificate(nodeId, "replacement");
+        identities.stageReplacementCertificate(nodeId, replacement);
+        assertThrows(ProviderIdentityDeniedException.class,
+                () -> identities.activateFromAuthenticatedPeer(
+                        ProviderPeerIdentity.fromCertificate(discarded)));
+        assertTrue(identities.revokeNode(nodeId));
+        assertThrows(ProviderIdentityDeniedException.class,
+                () -> identities.activateFromAuthenticatedPeer(
+                        ProviderPeerIdentity.fromCertificate(replacement)));
     }
 
     private UUID pendingNode() {
