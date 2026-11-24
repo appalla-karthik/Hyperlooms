@@ -44,7 +44,7 @@ The old active certificate remains valid while the replacement is staged. The fi
 
 ## Qualification
 
-CI's Linux/PostgreSQL integration suite creates ephemeral test CA/server/client certificates, performs an actual mTLS gRPC hello and heartbeat, verifies database state and rotation, and checks that an unbound certificate or missing client certificate is denied. The private test keys are created in a temporary directory and are never committed.
+CI's Linux/PostgreSQL integration suite is configured to create ephemeral test CA/server/client certificates, perform an actual mTLS gRPC hello and heartbeat, verify database state and rotation, and check that an unbound certificate or missing client certificate is denied. A green CI run is still required to mark this qualification passed. The private test keys are created in a temporary directory and are never committed.
 
 For the **separate Linux NVIDIA host qualification**, use an enrolled node and its bound certificate, then:
 
