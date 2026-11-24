@@ -4,7 +4,7 @@ COPY services/control-plane/ ./
 COPY proto/ /workspace/proto/
 RUN gradle --no-daemon clean bootJar
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 RUN useradd --system --uid 10001 --create-home hyperlooms
 WORKDIR /app
 COPY --from=build /workspace/services/control-plane/build/libs/*.jar /app/control-plane.jar
