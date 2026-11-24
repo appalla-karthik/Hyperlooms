@@ -105,6 +105,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var sequence uint64
+	pendingReceipts := make(map[string]string)
 	for {
 		select {
 		case <-ctx.Done():
@@ -124,13 +125,11 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 				ackTimeout.Stop()
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
-			response, err := stream.Recv()
+			err := receiveHeartbeatAcknowledgement(stream, requestID, cfg.NodeID,
+				gpus, pendingReceipts, logger)
 			ackTimeout.Stop()
 			if err != nil {
-				return fmt.Errorf("receive heartbeat acknowledgement: %w", err)
-			}
-			if response.GetHeartbeatAcknowledgement() == nil || response.GetHeartbeatAcknowledgement().GetRequestMessageId() != requestID {
-				return fmt.Errorf("invalid heartbeat acknowledgement")
+				return fmt.Errorf("heartbeat exchange: %w", err)
 			}
 			state.Heartbeat()
 		}

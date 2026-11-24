@@ -139,6 +139,7 @@ type ConnectRequest struct {
 	//
 	//	*ConnectRequest_Hello
 	//	*ConnectRequest_Heartbeat
+	//	*ConnectRequest_LeaseReceipt
 	Body          isConnectRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -206,6 +207,15 @@ func (x *ConnectRequest) GetHeartbeat() *AgentHeartbeat {
 	return nil
 }
 
+func (x *ConnectRequest) GetLeaseReceipt() *AgentLeaseReceipt {
+	if x != nil {
+		if x, ok := x.Body.(*ConnectRequest_LeaseReceipt); ok {
+			return x.LeaseReceipt
+		}
+	}
+	return nil
+}
+
 type isConnectRequest_Body interface {
 	isConnectRequest_Body()
 }
@@ -218,9 +228,15 @@ type ConnectRequest_Heartbeat struct {
 	Heartbeat *AgentHeartbeat `protobuf:"bytes,11,opt,name=heartbeat,proto3,oneof"`
 }
 
+type ConnectRequest_LeaseReceipt struct {
+	LeaseReceipt *AgentLeaseReceipt `protobuf:"bytes,12,opt,name=lease_receipt,json=leaseReceipt,proto3,oneof"`
+}
+
 func (*ConnectRequest_Hello) isConnectRequest_Body() {}
 
 func (*ConnectRequest_Heartbeat) isConnectRequest_Body() {}
+
+func (*ConnectRequest_LeaseReceipt) isConnectRequest_Body() {}
 
 type ConnectResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -229,6 +245,8 @@ type ConnectResponse struct {
 	//
 	//	*ConnectResponse_HelloAcknowledgement
 	//	*ConnectResponse_HeartbeatAcknowledgement
+	//	*ConnectResponse_LeaseOffer
+	//	*ConnectResponse_LeaseReceiptAcknowledgement
 	Body          isConnectResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -296,6 +314,24 @@ func (x *ConnectResponse) GetHeartbeatAcknowledgement() *HeartbeatAcknowledgemen
 	return nil
 }
 
+func (x *ConnectResponse) GetLeaseOffer() *LeaseOffer {
+	if x != nil {
+		if x, ok := x.Body.(*ConnectResponse_LeaseOffer); ok {
+			return x.LeaseOffer
+		}
+	}
+	return nil
+}
+
+func (x *ConnectResponse) GetLeaseReceiptAcknowledgement() *LeaseReceiptAcknowledgement {
+	if x != nil {
+		if x, ok := x.Body.(*ConnectResponse_LeaseReceiptAcknowledgement); ok {
+			return x.LeaseReceiptAcknowledgement
+		}
+	}
+	return nil
+}
+
 type isConnectResponse_Body interface {
 	isConnectResponse_Body()
 }
@@ -308,9 +344,21 @@ type ConnectResponse_HeartbeatAcknowledgement struct {
 	HeartbeatAcknowledgement *HeartbeatAcknowledgement `protobuf:"bytes,11,opt,name=heartbeat_acknowledgement,json=heartbeatAcknowledgement,proto3,oneof"`
 }
 
+type ConnectResponse_LeaseOffer struct {
+	LeaseOffer *LeaseOffer `protobuf:"bytes,12,opt,name=lease_offer,json=leaseOffer,proto3,oneof"`
+}
+
+type ConnectResponse_LeaseReceiptAcknowledgement struct {
+	LeaseReceiptAcknowledgement *LeaseReceiptAcknowledgement `protobuf:"bytes,13,opt,name=lease_receipt_acknowledgement,json=leaseReceiptAcknowledgement,proto3,oneof"`
+}
+
 func (*ConnectResponse_HelloAcknowledgement) isConnectResponse_Body() {}
 
 func (*ConnectResponse_HeartbeatAcknowledgement) isConnectResponse_Body() {}
+
+func (*ConnectResponse_LeaseOffer) isConnectResponse_Body() {}
+
+func (*ConnectResponse_LeaseReceiptAcknowledgement) isConnectResponse_Body() {}
 
 type AgentHello struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -661,24 +709,241 @@ func (x *HeartbeatAcknowledgement) GetServerTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// A transport offer only. Receipt does not authorize execution or extend the lease.
+type LeaseOffer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	LeaseId       string                 `protobuf:"bytes,3,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	NodeId        string                 `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	GpuUuid       string                 `protobuf:"bytes,5,opt,name=gpu_uuid,json=gpuUuid,proto3" json:"gpu_uuid,omitempty"`
+	FencingToken  uint64                 `protobuf:"varint,6,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaseOffer) Reset() {
+	*x = LeaseOffer{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaseOffer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaseOffer) ProtoMessage() {}
+
+func (x *LeaseOffer) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaseOffer.ProtoReflect.Descriptor instead.
+func (*LeaseOffer) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LeaseOffer) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *LeaseOffer) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *LeaseOffer) GetLeaseId() string {
+	if x != nil {
+		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *LeaseOffer) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *LeaseOffer) GetGpuUuid() string {
+	if x != nil {
+		return x.GpuUuid
+	}
+	return ""
+}
+
+func (x *LeaseOffer) GetFencingToken() uint64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+func (x *LeaseOffer) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type AgentLeaseReceipt struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	LeaseId       string                 `protobuf:"bytes,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	FencingToken  uint64                 `protobuf:"varint,3,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentLeaseReceipt) Reset() {
+	*x = AgentLeaseReceipt{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentLeaseReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentLeaseReceipt) ProtoMessage() {}
+
+func (x *AgentLeaseReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentLeaseReceipt.ProtoReflect.Descriptor instead.
+func (*AgentLeaseReceipt) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *AgentLeaseReceipt) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *AgentLeaseReceipt) GetLeaseId() string {
+	if x != nil {
+		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *AgentLeaseReceipt) GetFencingToken() uint64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+type LeaseReceiptAcknowledgement struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RequestMessageId string                 `protobuf:"bytes,1,opt,name=request_message_id,json=requestMessageId,proto3" json:"request_message_id,omitempty"`
+	LeaseId          string                 `protobuf:"bytes,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	ServerTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *LeaseReceiptAcknowledgement) Reset() {
+	*x = LeaseReceiptAcknowledgement{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaseReceiptAcknowledgement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaseReceiptAcknowledgement) ProtoMessage() {}
+
+func (x *LeaseReceiptAcknowledgement) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaseReceiptAcknowledgement.ProtoReflect.Descriptor instead.
+func (*LeaseReceiptAcknowledgement) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LeaseReceiptAcknowledgement) GetRequestMessageId() string {
+	if x != nil {
+		return x.RequestMessageId
+	}
+	return ""
+}
+
+func (x *LeaseReceiptAcknowledgement) GetLeaseId() string {
+	if x != nil {
+		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *LeaseReceiptAcknowledgement) GetServerTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ServerTime
+	}
+	return nil
+}
+
 var File_hyperlooms_agent_v1_agent_session_proto protoreflect.FileDescriptor
 
 const file_hyperlooms_agent_v1_agent_session_proto_rawDesc = "" +
 	"\n" +
-	"'hyperlooms/agent/v1/agent_session.proto\x12\x13hyperlooms.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x01\n" +
+	"'hyperlooms/agent/v1/agent_session.proto\x12\x13hyperlooms.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x84\x02\n" +
 	"\x0eConnectRequest\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x127\n" +
 	"\x05hello\x18\n" +
 	" \x01(\v2\x1f.hyperlooms.agent.v1.AgentHelloH\x00R\x05hello\x12C\n" +
-	"\theartbeat\x18\v \x01(\v2#.hyperlooms.agent.v1.AgentHeartbeatH\x00R\theartbeatB\x06\n" +
-	"\x04body\"\x88\x02\n" +
+	"\theartbeat\x18\v \x01(\v2#.hyperlooms.agent.v1.AgentHeartbeatH\x00R\theartbeat\x12M\n" +
+	"\rlease_receipt\x18\f \x01(\v2&.hyperlooms.agent.v1.AgentLeaseReceiptH\x00R\fleaseReceiptB\x06\n" +
+	"\x04body\"\xc4\x03\n" +
 	"\x0fConnectResponse\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12`\n" +
 	"\x15hello_acknowledgement\x18\n" +
 	" \x01(\v2).hyperlooms.agent.v1.HelloAcknowledgementH\x00R\x14helloAcknowledgement\x12l\n" +
-	"\x19heartbeat_acknowledgement\x18\v \x01(\v2-.hyperlooms.agent.v1.HeartbeatAcknowledgementH\x00R\x18heartbeatAcknowledgementB\x06\n" +
+	"\x19heartbeat_acknowledgement\x18\v \x01(\v2-.hyperlooms.agent.v1.HeartbeatAcknowledgementH\x00R\x18heartbeatAcknowledgement\x12B\n" +
+	"\vlease_offer\x18\f \x01(\v2\x1f.hyperlooms.agent.v1.LeaseOfferH\x00R\n" +
+	"leaseOffer\x12v\n" +
+	"\x1dlease_receipt_acknowledgement\x18\r \x01(\v20.hyperlooms.agent.v1.LeaseReceiptAcknowledgementH\x00R\x1bleaseReceiptAcknowledgementB\x06\n" +
 	"\x04body\"\xea\x01\n" +
 	"\n" +
 	"AgentHello\x12\x17\n" +
@@ -710,6 +975,26 @@ const file_hyperlooms_agent_v1_agent_session_proto_rawDesc = "" +
 	"\x18HeartbeatAcknowledgement\x12,\n" +
 	"\x12request_message_id\x18\x01 \x01(\tR\x10requestMessageId\x12;\n" +
 	"\vserver_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"serverTime\"\xf1\x01\n" +
+	"\n" +
+	"LeaseOffer\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x02 \x01(\tR\tattemptId\x12\x19\n" +
+	"\blease_id\x18\x03 \x01(\tR\aleaseId\x12\x17\n" +
+	"\anode_id\x18\x04 \x01(\tR\x06nodeId\x12\x19\n" +
+	"\bgpu_uuid\x18\x05 \x01(\tR\agpuUuid\x12#\n" +
+	"\rfencing_token\x18\x06 \x01(\x04R\ffencingToken\x129\n" +
+	"\n" +
+	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"l\n" +
+	"\x11AgentLeaseReceipt\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x19\n" +
+	"\blease_id\x18\x02 \x01(\tR\aleaseId\x12#\n" +
+	"\rfencing_token\x18\x03 \x01(\x04R\ffencingToken\"\xa3\x01\n" +
+	"\x1bLeaseReceiptAcknowledgement\x12,\n" +
+	"\x12request_message_id\x18\x01 \x01(\tR\x10requestMessageId\x12\x19\n" +
+	"\blease_id\x18\x02 \x01(\tR\aleaseId\x12;\n" +
+	"\vserver_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"serverTime*\xb7\x01\n" +
 	"\x11AvailabilityState\x12\"\n" +
 	"\x1eAVAILABILITY_STATE_UNSPECIFIED\x10\x00\x12\x1e\n" +
@@ -740,38 +1025,46 @@ func file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP() []byte {
 }
 
 var file_hyperlooms_agent_v1_agent_session_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hyperlooms_agent_v1_agent_session_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_hyperlooms_agent_v1_agent_session_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_hyperlooms_agent_v1_agent_session_proto_goTypes = []any{
-	(AvailabilityState)(0),           // 0: hyperlooms.agent.v1.AvailabilityState
-	(HelloRejectionReason)(0),        // 1: hyperlooms.agent.v1.HelloRejectionReason
-	(*ConnectRequest)(nil),           // 2: hyperlooms.agent.v1.ConnectRequest
-	(*ConnectResponse)(nil),          // 3: hyperlooms.agent.v1.ConnectResponse
-	(*AgentHello)(nil),               // 4: hyperlooms.agent.v1.AgentHello
-	(*GpuCapability)(nil),            // 5: hyperlooms.agent.v1.GpuCapability
-	(*AgentHeartbeat)(nil),           // 6: hyperlooms.agent.v1.AgentHeartbeat
-	(*HelloAcknowledgement)(nil),     // 7: hyperlooms.agent.v1.HelloAcknowledgement
-	(*HeartbeatAcknowledgement)(nil), // 8: hyperlooms.agent.v1.HeartbeatAcknowledgement
-	(*timestamppb.Timestamp)(nil),    // 9: google.protobuf.Timestamp
+	(AvailabilityState)(0),              // 0: hyperlooms.agent.v1.AvailabilityState
+	(HelloRejectionReason)(0),           // 1: hyperlooms.agent.v1.HelloRejectionReason
+	(*ConnectRequest)(nil),              // 2: hyperlooms.agent.v1.ConnectRequest
+	(*ConnectResponse)(nil),             // 3: hyperlooms.agent.v1.ConnectResponse
+	(*AgentHello)(nil),                  // 4: hyperlooms.agent.v1.AgentHello
+	(*GpuCapability)(nil),               // 5: hyperlooms.agent.v1.GpuCapability
+	(*AgentHeartbeat)(nil),              // 6: hyperlooms.agent.v1.AgentHeartbeat
+	(*HelloAcknowledgement)(nil),        // 7: hyperlooms.agent.v1.HelloAcknowledgement
+	(*HeartbeatAcknowledgement)(nil),    // 8: hyperlooms.agent.v1.HeartbeatAcknowledgement
+	(*LeaseOffer)(nil),                  // 9: hyperlooms.agent.v1.LeaseOffer
+	(*AgentLeaseReceipt)(nil),           // 10: hyperlooms.agent.v1.AgentLeaseReceipt
+	(*LeaseReceiptAcknowledgement)(nil), // 11: hyperlooms.agent.v1.LeaseReceiptAcknowledgement
+	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
 }
 var file_hyperlooms_agent_v1_agent_session_proto_depIdxs = []int32{
 	4,  // 0: hyperlooms.agent.v1.ConnectRequest.hello:type_name -> hyperlooms.agent.v1.AgentHello
 	6,  // 1: hyperlooms.agent.v1.ConnectRequest.heartbeat:type_name -> hyperlooms.agent.v1.AgentHeartbeat
-	7,  // 2: hyperlooms.agent.v1.ConnectResponse.hello_acknowledgement:type_name -> hyperlooms.agent.v1.HelloAcknowledgement
-	8,  // 3: hyperlooms.agent.v1.ConnectResponse.heartbeat_acknowledgement:type_name -> hyperlooms.agent.v1.HeartbeatAcknowledgement
-	5,  // 4: hyperlooms.agent.v1.AgentHello.gpus:type_name -> hyperlooms.agent.v1.GpuCapability
-	9,  // 5: hyperlooms.agent.v1.AgentHello.reported_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: hyperlooms.agent.v1.AgentHeartbeat.availability:type_name -> hyperlooms.agent.v1.AvailabilityState
-	9,  // 7: hyperlooms.agent.v1.AgentHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	1,  // 8: hyperlooms.agent.v1.HelloAcknowledgement.rejection_reason:type_name -> hyperlooms.agent.v1.HelloRejectionReason
-	9,  // 9: hyperlooms.agent.v1.HelloAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	9,  // 10: hyperlooms.agent.v1.HeartbeatAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	2,  // 11: hyperlooms.agent.v1.AgentSessionService.Connect:input_type -> hyperlooms.agent.v1.ConnectRequest
-	3,  // 12: hyperlooms.agent.v1.AgentSessionService.Connect:output_type -> hyperlooms.agent.v1.ConnectResponse
-	12, // [12:13] is the sub-list for method output_type
-	11, // [11:12] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	10, // 2: hyperlooms.agent.v1.ConnectRequest.lease_receipt:type_name -> hyperlooms.agent.v1.AgentLeaseReceipt
+	7,  // 3: hyperlooms.agent.v1.ConnectResponse.hello_acknowledgement:type_name -> hyperlooms.agent.v1.HelloAcknowledgement
+	8,  // 4: hyperlooms.agent.v1.ConnectResponse.heartbeat_acknowledgement:type_name -> hyperlooms.agent.v1.HeartbeatAcknowledgement
+	9,  // 5: hyperlooms.agent.v1.ConnectResponse.lease_offer:type_name -> hyperlooms.agent.v1.LeaseOffer
+	11, // 6: hyperlooms.agent.v1.ConnectResponse.lease_receipt_acknowledgement:type_name -> hyperlooms.agent.v1.LeaseReceiptAcknowledgement
+	5,  // 7: hyperlooms.agent.v1.AgentHello.gpus:type_name -> hyperlooms.agent.v1.GpuCapability
+	12, // 8: hyperlooms.agent.v1.AgentHello.reported_at:type_name -> google.protobuf.Timestamp
+	0,  // 9: hyperlooms.agent.v1.AgentHeartbeat.availability:type_name -> hyperlooms.agent.v1.AvailabilityState
+	12, // 10: hyperlooms.agent.v1.AgentHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	1,  // 11: hyperlooms.agent.v1.HelloAcknowledgement.rejection_reason:type_name -> hyperlooms.agent.v1.HelloRejectionReason
+	12, // 12: hyperlooms.agent.v1.HelloAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	12, // 13: hyperlooms.agent.v1.HeartbeatAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	12, // 14: hyperlooms.agent.v1.LeaseOffer.expires_at:type_name -> google.protobuf.Timestamp
+	12, // 15: hyperlooms.agent.v1.LeaseReceiptAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	2,  // 16: hyperlooms.agent.v1.AgentSessionService.Connect:input_type -> hyperlooms.agent.v1.ConnectRequest
+	3,  // 17: hyperlooms.agent.v1.AgentSessionService.Connect:output_type -> hyperlooms.agent.v1.ConnectResponse
+	17, // [17:18] is the sub-list for method output_type
+	16, // [16:17] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_hyperlooms_agent_v1_agent_session_proto_init() }
@@ -782,10 +1075,13 @@ func file_hyperlooms_agent_v1_agent_session_proto_init() {
 	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[0].OneofWrappers = []any{
 		(*ConnectRequest_Hello)(nil),
 		(*ConnectRequest_Heartbeat)(nil),
+		(*ConnectRequest_LeaseReceipt)(nil),
 	}
 	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[1].OneofWrappers = []any{
 		(*ConnectResponse_HelloAcknowledgement)(nil),
 		(*ConnectResponse_HeartbeatAcknowledgement)(nil),
+		(*ConnectResponse_LeaseOffer)(nil),
+		(*ConnectResponse_LeaseReceiptAcknowledgement)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -793,7 +1089,7 @@ func file_hyperlooms_agent_v1_agent_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hyperlooms_agent_v1_agent_session_proto_rawDesc), len(file_hyperlooms_agent_v1_agent_session_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

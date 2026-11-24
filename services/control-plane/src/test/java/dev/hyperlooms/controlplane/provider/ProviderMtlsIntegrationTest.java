@@ -26,8 +26,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.SchedulerClaimService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
+import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
 import dev.hyperlooms.protocol.agent.v1.AgentSessionServiceGrpc;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
@@ -62,7 +65,12 @@ class ProviderMtlsIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private SchedulerClaimService claims;
+
     private final List<UUID> inviteIds = new ArrayList<>();
+    private final List<UUID> jobIds = new ArrayList<>();
+    private final List<UUID> recipeIds = new ArrayList<>();
 
     @BeforeEach
     void requireOpenSslOnWindows() {
@@ -75,6 +83,16 @@ class ProviderMtlsIntegrationTest {
 
     @AfterEach
     void removeTestRecords() {
+        for (UUID jobId : jobIds) {
+            jdbc.update("DELETE FROM outbox_events WHERE aggregate_id = ?", jobId);
+            jdbc.update("DELETE FROM gpu_leases WHERE attempt_id IN "
+                    + "(SELECT id FROM job_attempts WHERE job_id = ?)", jobId);
+            jdbc.update("DELETE FROM job_attempts WHERE job_id = ?", jobId);
+            jdbc.update("DELETE FROM jobs WHERE id = ?", jobId);
+        }
+        for (UUID recipeId : recipeIds) {
+            jdbc.update("DELETE FROM workload_recipes WHERE id = ?", recipeId);
+        }
         for (UUID inviteId : inviteIds) {
             List<UUID> nodeIds = jdbc.queryForList(
                     "SELECT node_id FROM provider_enrollment_invites WHERE id = ? AND node_id IS NOT NULL",
@@ -88,6 +106,65 @@ class ProviderMtlsIntegrationTest {
             for (UUID nodeId : nodeIds) {
                 jdbc.update("DELETE FROM provider_nodes WHERE id = ?", nodeId);
             }
+        }
+    }
+
+    @Test
+    void issuedLeaseOfferAndReceiptCrossRealMtlsAndReachDatabase() throws Exception {
+        UUID nodeId = pendingNode();
+        TestCa ca = new TestCa(temporary);
+        SignedCertificate serverCertificate = ca.issue("server", "DNS:localhost", "serverAuth", 41);
+        SignedCertificate clientCertificate = ca.issue("client", providerSan(nodeId), "clientAuth", 42);
+        identities.bindExpectedCertificate(nodeId,
+                new OperatorCertificateVerifier(ca.certificate().toString())
+                        .verifyClientCertificate(clientCertificate.certificate()));
+
+        try (TestServer server = new TestServer(serverCertificate, ca.certificate(), sessions);
+                TestSession client = server.connect(clientCertificate, ca.certificate())) {
+            client.send(hello(nodeId));
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getHelloAcknowledgement().getAccepted());
+            jdbc.update("UPDATE provider_gpus SET verification_state = 'VERIFIED', "
+                    + "verified_at = CURRENT_TIMESTAMP WHERE node_id = ? AND gpu_uuid = 'GPU-test'", nodeId);
+            jdbc.update("UPDATE provider_nodes SET availability_state = 'AVAILABLE', "
+                    + "last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", nodeId);
+
+            UUID recipeId = UUID.randomUUID();
+            recipeIds.add(recipeId);
+            jdbc.update("""
+                    INSERT INTO workload_recipes
+                        (id, name, image_repository, image_digest, max_runtime_seconds,
+                         min_vram_bytes, state, approved_at)
+                    VALUES (?, ?, 'registry.example.invalid/hyperlooms/test', ?, 60,
+                        1073741824, 'APPROVED', CURRENT_TIMESTAMP)
+                    """, recipeId, "mtls-offer-test-" + recipeId, "sha256:" + "a".repeat(64));
+            UUID jobId = UUID.randomUUID();
+            jobIds.add(jobId);
+            jdbc.update("""
+                    INSERT INTO jobs
+                        (id, requester_subject, recipe_id, state, idempotency_key, request_sha256)
+                    VALUES (?, ?, ?, 'QUEUED', ?, ?)
+                    """, jobId, "mtls-offer-test:" + jobId, recipeId, jobId.toString(), "a".repeat(64));
+            LeaseAssignment assignment = claims.claimNext().orElseThrow();
+            assertEquals(jobId, assignment.jobId());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("heartbeat-offer")
+                    .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                            .setSequence(1)).build());
+            ConnectResponse offer = assertInstanceOf(ConnectResponse.class, client.receive());
+            assertEquals(assignment.leaseId().toString(), offer.getLeaseOffer().getLeaseId());
+            assertEquals(assignment.fencingToken(), offer.getLeaseOffer().getFencingToken());
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .hasHeartbeatAcknowledgement());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("receipt-offer")
+                    .setLeaseReceipt(AgentLeaseReceipt.newBuilder().setNodeId(nodeId.toString())
+                            .setLeaseId(assignment.leaseId().toString())
+                            .setFencingToken(assignment.fencingToken())).build());
+            assertEquals("receipt-offer", assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getLeaseReceiptAcknowledgement().getRequestMessageId());
+            assertEquals("ACKNOWLEDGED", jdbc.queryForObject(
+                    "SELECT state FROM gpu_leases WHERE id = ?", String.class, assignment.leaseId()));
         }
     }
 

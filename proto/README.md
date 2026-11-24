@@ -2,7 +2,7 @@
 
 This directory owns versioned Protobuf contracts between the Spring Boot control plane and Go provider agents.
 
-The first Phase 1 contract is `hyperlooms/agent/v1/agent_session.proto`. It defines a bidirectional agent session for hello and heartbeat only. The Java server generates its stubs during Gradle builds; the Go stubs are generated with the pinned plugins in `buf.gen.yaml`. Job assignment/completion messages will be added when the lease runtime is implemented.
+The Phase 1 contract is `hyperlooms/agent/v1/agent_session.proto`. It defines a bidirectional agent session for hello, heartbeat, an issued-lease transport offer, and a receipt acknowledgement. The offer contains identifiers, GPU UUID, fencing token, and expiry only; it is not an execution command and carries no image, input, secret, or artifact location. The Java server generates its stubs during Gradle builds; the Go stubs are generated with the pinned plugins in `buf.gen.yaml`. Execution, renewal, and completion messages remain pending.
 
 Protocol rules:
 

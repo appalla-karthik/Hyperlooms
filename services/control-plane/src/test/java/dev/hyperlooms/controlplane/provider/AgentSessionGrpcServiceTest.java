@@ -5,19 +5,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import dev.hyperlooms.controlplane.job.LeaseAcknowledgementService;
+import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.LeaseOfferService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
+import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
 import dev.hyperlooms.protocol.agent.v1.GpuCapability;
@@ -31,15 +39,20 @@ class AgentSessionGrpcServiceTest {
     private final UUID nodeId = UUID.randomUUID();
     private ProviderPeerIdentity peer;
     private ProviderCapabilityService capabilities;
+    private LeaseOfferService offers;
+    private LeaseAcknowledgementService acknowledgements;
     private AgentSessionGrpcService service;
     private Responses responses;
 
     @BeforeEach
     void setUp() {
         peer = mock(ProviderPeerIdentity.class);
-        org.mockito.Mockito.when(peer.nodeId()).thenReturn(nodeId);
+        when(peer.nodeId()).thenReturn(nodeId);
         capabilities = mock(ProviderCapabilityService.class);
-        service = new AgentSessionGrpcService(capabilities);
+        offers = mock(LeaseOfferService.class);
+        acknowledgements = mock(LeaseAcknowledgementService.class);
+        when(offers.nextIssuedForPeer(peer)).thenReturn(Optional.empty());
+        service = new AgentSessionGrpcService(capabilities, offers, acknowledgements);
         responses = new Responses();
     }
 
@@ -106,6 +119,43 @@ class AgentSessionGrpcServiceTest {
         assertEquals(Status.Code.FAILED_PRECONDITION,
                 Status.fromThrowable(responses.error).getCode());
         verify(capabilities, never()).recordHeartbeatFromAuthenticatedPeer(any());
+    }
+
+    @Test
+    void heartbeatOffersIssuedLeaseAndAuthenticatedReceiptIsRecorded() {
+        UUID leaseId = UUID.randomUUID();
+        LeaseAssignment assignment = new LeaseAssignment(UUID.randomUUID(), UUID.randomUUID(),
+                leaseId, nodeId, "GPU-test", 42, Instant.now().plusSeconds(90));
+        when(offers.nextIssuedForPeer(peer)).thenReturn(Optional.of(assignment));
+        StreamObserver<ConnectRequest> requests = connect();
+        requests.onNext(hello(nodeId, 1));
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("heartbeat-1")
+                .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                        .setSequence(1)).build());
+
+        assertEquals(leaseId.toString(), responses.messages.get(1).getLeaseOffer().getLeaseId());
+        assertEquals(42, responses.messages.get(1).getLeaseOffer().getFencingToken());
+        assertTrue(responses.messages.get(2).hasHeartbeatAcknowledgement());
+
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("receipt-1")
+                .setLeaseReceipt(AgentLeaseReceipt.newBuilder().setNodeId(nodeId.toString())
+                        .setLeaseId(leaseId.toString()).setFencingToken(42)).build());
+        verify(acknowledgements).acknowledge(peer, leaseId, 42);
+        assertEquals("receipt-1", responses.messages.get(3)
+                .getLeaseReceiptAcknowledgement().getRequestMessageId());
+    }
+
+    @Test
+    void wrongNodeReceiptFailsWithoutRecording() {
+        StreamObserver<ConnectRequest> requests = connect();
+        requests.onNext(hello(nodeId, 1));
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("receipt-bad")
+                .setLeaseReceipt(AgentLeaseReceipt.newBuilder()
+                        .setNodeId(UUID.randomUUID().toString())
+                        .setLeaseId(UUID.randomUUID().toString()).setFencingToken(1)).build());
+        assertEquals(Status.Code.PERMISSION_DENIED,
+                Status.fromThrowable(responses.error).getCode());
+        verify(acknowledgements, never()).acknowledge(any(), any(), anyLong());
     }
 
     private StreamObserver<ConnectRequest> connect() {

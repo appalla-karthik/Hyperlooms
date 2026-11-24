@@ -19,6 +19,7 @@ message ConnectRequest {
   oneof body {
     AgentHello hello = 10;
     AgentHeartbeat heartbeat = 11;
+    AgentLeaseReceipt lease_receipt = 12;
   }
 }
 
@@ -27,6 +28,8 @@ message ConnectResponse {
   oneof body {
     HelloAcknowledgement hello_acknowledgement = 10;
     HeartbeatAcknowledgement heartbeat_acknowledgement = 11;
+    LeaseOffer lease_offer = 12;
+    LeaseReceiptAcknowledgement lease_receipt_acknowledgement = 13;
   }
 }
 
@@ -81,4 +84,27 @@ message HelloAcknowledgement {
 message HeartbeatAcknowledgement {
   string request_message_id = 1;
   google.protobuf.Timestamp server_time = 2;
+}
+
+// A transport offer only. Receipt does not authorize execution or extend the lease.
+message LeaseOffer {
+  string job_id = 1;
+  string attempt_id = 2;
+  string lease_id = 3;
+  string node_id = 4;
+  string gpu_uuid = 5;
+  uint64 fencing_token = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message AgentLeaseReceipt {
+  string node_id = 1;
+  string lease_id = 2;
+  uint64 fencing_token = 3;
+}
+
+message LeaseReceiptAcknowledgement {
+  string request_message_id = 1;
+  string lease_id = 2;
+  google.protobuf.Timestamp server_time = 3;
 }

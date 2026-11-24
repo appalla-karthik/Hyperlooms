@@ -47,6 +47,9 @@ class SchedulerClaimServiceIntegrationTest {
     private LeaseAcknowledgementService acknowledgements;
 
     @Autowired
+    private LeaseOfferService offers;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @AfterEach
@@ -290,6 +293,22 @@ class SchedulerClaimServiceIntegrationTest {
         }
         assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
                 + "WHERE aggregate_id = ? AND event_type = 'JOB_LEASE_ACKNOWLEDGED'", jobId));
+    }
+
+    @Test
+    void offerLookupRequiresActiveCredentialAndStopsAfterReceipt() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity peer = peer(nodeId, "active");
+
+        assertEquals(assignment, offers.nextIssuedForPeer(peer).orElseThrow());
+        jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP WHERE node_id = ?", nodeId);
+        assertTrue(offers.nextIssuedForPeer(peer).isEmpty());
+        jdbc.update("UPDATE provider_certificates SET revoked_at = NULL WHERE node_id = ?", nodeId);
+        acknowledgements.acknowledge(peer, assignment.leaseId(), assignment.fencingToken());
+        assertTrue(offers.nextIssuedForPeer(peer).isEmpty());
     }
 
     private ProviderPeerIdentity peer(UUID nodeId, String serial) throws Exception {

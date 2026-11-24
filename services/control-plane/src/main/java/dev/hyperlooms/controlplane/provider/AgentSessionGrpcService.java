@@ -7,8 +7,13 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.google.protobuf.Timestamp;
+import dev.hyperlooms.controlplane.job.LeaseAcknowledgementDeniedException;
+import dev.hyperlooms.controlplane.job.LeaseAcknowledgementService;
+import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.LeaseOfferService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
+import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
 import dev.hyperlooms.protocol.agent.v1.AgentSessionServiceGrpc;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
@@ -16,6 +21,8 @@ import dev.hyperlooms.protocol.agent.v1.GpuCapability;
 import dev.hyperlooms.protocol.agent.v1.HeartbeatAcknowledgement;
 import dev.hyperlooms.protocol.agent.v1.HelloAcknowledgement;
 import dev.hyperlooms.protocol.agent.v1.HelloRejectionReason;
+import dev.hyperlooms.protocol.agent.v1.LeaseOffer;
+import dev.hyperlooms.protocol.agent.v1.LeaseReceiptAcknowledgement;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
@@ -25,9 +32,14 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
 
     private static final int HEARTBEAT_INTERVAL_SECONDS = 30;
     private final ProviderCapabilityService capabilities;
+    private final LeaseOfferService offers;
+    private final LeaseAcknowledgementService acknowledgements;
 
-    public AgentSessionGrpcService(ProviderCapabilityService capabilities) {
+    public AgentSessionGrpcService(ProviderCapabilityService capabilities,
+            LeaseOfferService offers, LeaseAcknowledgementService acknowledgements) {
         this.capabilities = capabilities;
+        this.offers = offers;
+        this.acknowledgements = acknowledgements;
     }
 
     @Override
@@ -70,12 +82,16 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                     hello(request);
                 } else if (accepted && request.hasHeartbeat()) {
                     heartbeat(request);
+                } else if (accepted && request.hasLeaseReceipt()) {
+                    receipt(request);
                 } else {
                     fail(Status.FAILED_PRECONDITION.withDescription(
-                            "exactly one hello is required before heartbeats"));
+                            "exactly one hello is required before agent messages"));
                 }
             } catch (ProviderIdentityDeniedException exception) {
                 fail(Status.PERMISSION_DENIED.withDescription("provider identity denied"));
+            } catch (LeaseAcknowledgementDeniedException exception) {
+                fail(Status.PERMISSION_DENIED.withDescription("lease receipt denied"));
             } catch (IllegalArgumentException exception) {
                 fail(Status.INVALID_ARGUMENT.withDescription("invalid agent message"));
             } catch (RuntimeException exception) {
@@ -128,10 +144,33 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
             }
             capabilities.recordHeartbeatFromAuthenticatedPeer(peer);
             lastSequence = heartbeat.getSequence();
+            offers.nextIssuedForPeer(peer).ifPresent(assignment -> responses.onNext(
+                    ConnectResponse.newBuilder()
+                            .setMessageId(UUID.randomUUID().toString())
+                            .setLeaseOffer(toOffer(assignment))
+                            .build()));
             responses.onNext(ConnectResponse.newBuilder()
                     .setMessageId(UUID.randomUUID().toString())
                     .setHeartbeatAcknowledgement(HeartbeatAcknowledgement.newBuilder()
                             .setRequestMessageId(request.getMessageId())
+                            .setServerTime(now()))
+                    .build());
+        }
+
+        private void receipt(ConnectRequest request) {
+            AgentLeaseReceipt receipt = request.getLeaseReceipt();
+            if (!peer.nodeId().toString().equals(receipt.getNodeId())
+                    || receipt.getFencingToken() <= 0) {
+                fail(Status.PERMISSION_DENIED.withDescription("lease receipt denied"));
+                return;
+            }
+            UUID leaseId = UUID.fromString(receipt.getLeaseId());
+            acknowledgements.acknowledge(peer, leaseId, receipt.getFencingToken());
+            responses.onNext(ConnectResponse.newBuilder()
+                    .setMessageId(UUID.randomUUID().toString())
+                    .setLeaseReceiptAcknowledgement(LeaseReceiptAcknowledgement.newBuilder()
+                            .setRequestMessageId(request.getMessageId())
+                            .setLeaseId(leaseId.toString())
                             .setServerTime(now()))
                     .build());
         }
@@ -169,8 +208,23 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
     }
 
     private static Timestamp now() {
-        Instant instant = Instant.now();
+        return timestamp(Instant.now());
+    }
+
+    private static Timestamp timestamp(Instant instant) {
         return Timestamp.newBuilder().setSeconds(instant.getEpochSecond())
                 .setNanos(instant.getNano()).build();
+    }
+
+    private static LeaseOffer toOffer(LeaseAssignment assignment) {
+        return LeaseOffer.newBuilder()
+                .setJobId(assignment.jobId().toString())
+                .setAttemptId(assignment.attemptId().toString())
+                .setLeaseId(assignment.leaseId().toString())
+                .setNodeId(assignment.nodeId().toString())
+                .setGpuUuid(assignment.gpuUuid())
+                .setFencingToken(assignment.fencingToken())
+                .setExpiresAt(timestamp(assignment.expiresAt()))
+                .build();
     }
 }
