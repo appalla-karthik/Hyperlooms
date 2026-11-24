@@ -1,10 +1,16 @@
 package dev.hyperlooms.controlplane.job;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +26,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import dev.hyperlooms.controlplane.provider.ProviderPeerIdentity;
+
 @Tag("integration")
 @SpringBootTest
 class SchedulerClaimServiceIntegrationTest {
@@ -34,6 +42,9 @@ class SchedulerClaimServiceIntegrationTest {
 
     @Autowired
     private LeaseExpiryService expirations;
+
+    @Autowired
+    private LeaseAcknowledgementService acknowledgements;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -203,6 +214,95 @@ class SchedulerClaimServiceIntegrationTest {
                 assignment.attemptId()));
         assertEquals("EXPIRED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
         assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+    }
+
+    @Test
+    void authenticatedReceiptIsIdempotentAndEmitsOneEvent() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity peer = peer(nodeId, "active");
+
+        LeaseAcknowledgement first = acknowledgements.acknowledge(
+                peer, assignment.leaseId(), assignment.fencingToken());
+        LeaseAcknowledgement second = acknowledgements.acknowledge(
+                peer, assignment.leaseId(), assignment.fencingToken());
+
+        assertEquals(first, second);
+        assertEquals(assignment.expiresAt(), first.expiresAt());
+        assertEquals("ACKNOWLEDGED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_LEASE_ACKNOWLEDGED'", jobId));
+    }
+
+    @Test
+    void receiptRejectsWrongPeerTokenRevokedCredentialAndExpiredLease() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity peer = peer(nodeId, "active");
+        UUID otherNode = provider(8L * 1024 * 1024 * 1024);
+        ProviderPeerIdentity otherPeer = peer(otherNode, "other");
+
+        assertThrows(LeaseAcknowledgementDeniedException.class,
+                () -> acknowledgements.acknowledge(otherPeer, assignment.leaseId(),
+                        assignment.fencingToken()));
+        assertThrows(LeaseAcknowledgementDeniedException.class,
+                () -> acknowledgements.acknowledge(peer, assignment.leaseId(),
+                        assignment.fencingToken() + 1));
+        jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP WHERE node_id = ?", nodeId);
+        assertThrows(LeaseAcknowledgementDeniedException.class,
+                () -> acknowledgements.acknowledge(peer, assignment.leaseId(),
+                        assignment.fencingToken()));
+        jdbc.update("UPDATE provider_certificates SET revoked_at = NULL WHERE node_id = ?", nodeId);
+        makeLeaseExpired(assignment.leaseId());
+        assertThrows(LeaseAcknowledgementDeniedException.class,
+                () -> acknowledgements.acknowledge(peer, assignment.leaseId(),
+                        assignment.fencingToken()));
+        assertEquals("ISSUED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
+    }
+
+    @Test
+    void concurrentReceiptsCannotDuplicateAcknowledgementEvent() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity peer = peer(nodeId, "active");
+        CountDownLatch start = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<LeaseAcknowledgement> first = executor.submit(() -> {
+                start.await();
+                return acknowledgements.acknowledge(peer, assignment.leaseId(), assignment.fencingToken());
+            });
+            Future<LeaseAcknowledgement> second = executor.submit(() -> {
+                start.await();
+                return acknowledgements.acknowledge(peer, assignment.leaseId(), assignment.fencingToken());
+            });
+            start.countDown();
+            assertEquals(first.get(), second.get());
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_LEASE_ACKNOWLEDGED'", jobId));
+    }
+
+    private ProviderPeerIdentity peer(UUID nodeId, String serial) throws Exception {
+        X509Certificate certificate = mock(X509Certificate.class);
+        when(certificate.getSubjectAlternativeNames()).thenReturn(List.<List<?>>of(
+                List.of(6, "urn:hyperlooms:provider:" + nodeId)));
+        when(certificate.getEncoded()).thenReturn(
+                ("lease-test-cert-" + nodeId + "-" + serial).getBytes(StandardCharsets.US_ASCII));
+        when(certificate.getNotAfter()).thenReturn(Date.from(Instant.now().plusSeconds(86400)));
+        ProviderPeerIdentity identity = ProviderPeerIdentity.fromCertificate(certificate);
+        jdbc.update("UPDATE provider_certificates SET certificate_sha256 = ? WHERE node_id = ?",
+                identity.certificateSha256(), nodeId);
+        return identity;
     }
 
     private void makeLeaseExpired(UUID leaseId) {

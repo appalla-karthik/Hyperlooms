@@ -128,8 +128,8 @@ public class ProviderIdentityService {
         });
     }
 
-    /** Used within the capability report transaction; locks against concurrent revocation. */
-    void requireActivePeerLocked(ProviderPeerIdentity peer) {
+    /** Use inside a transaction with a peer established by mTLS; locks against revocation. */
+    public void requireActivePeerLocked(ProviderPeerIdentity peer) {
         if (peer == null) {
             throw new ProviderIdentityDeniedException();
         }
