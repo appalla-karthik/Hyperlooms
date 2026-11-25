@@ -50,6 +50,9 @@ class SchedulerClaimServiceIntegrationTest {
     private LeaseOfferService offers;
 
     @Autowired
+    private LeaseExecutionStateService execution;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @AfterEach
@@ -334,6 +337,88 @@ class SchedulerClaimServiceIntegrationTest {
         jdbc.update("UPDATE provider_certificates SET revoked_at = NULL WHERE node_id = ?", nodeId);
         acknowledgements.acknowledge(peer, assignment.leaseId(), assignment.fencingToken());
         assertTrue(offers.nextIssuedForPeer(peer).isEmpty());
+    }
+
+    @Test
+    void executionTransitionsRequireAcknowledgedLeaseAndQuarantineOnFailure() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken()));
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken());
+        assertEquals("STARTING", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        execution.markRunning(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markRunning(identity, assignment.leaseId(), assignment.fencingToken());
+        assertEquals("RUNNING", value("SELECT state FROM job_attempts WHERE id = ?", assignment.attemptId()));
+        execution.markFailed(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markFailed(identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertEquals("FAILED", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("EXECUTION_FAILED", value("SELECT failure_code FROM job_attempts WHERE id = ?",
+                assignment.attemptId()));
+        assertEquals("COMPLETED", value("SELECT state FROM gpu_leases WHERE id = ?", assignment.leaseId()));
+        assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = ? "
+                + "AND event_type = 'JOB_STARTING'", jobId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = ? "
+                + "AND event_type = 'JOB_RUNNING'", jobId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = ? "
+                + "AND event_type = 'JOB_EXECUTION_FAILED'", jobId));
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markRunning(identity, assignment.leaseId(), assignment.fencingToken()));
+    }
+
+    @Test
+    void executionRejectsWrongPeerTokenRevokedCredentialAndExpiredLease() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        UUID otherNode = provider(8L * 1024 * 1024 * 1024);
+        ProviderPeerIdentity otherIdentity = peer(otherNode, "other");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markStarting(otherIdentity, assignment.leaseId(), assignment.fencingToken()));
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken() + 1));
+        jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP WHERE node_id = ?", nodeId);
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken()));
+        jdbc.update("UPDATE provider_certificates SET revoked_at = NULL WHERE node_id = ?", nodeId);
+        makeLeaseExpired(assignment.leaseId());
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken()));
+        assertEquals("LEASED", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals(0L, count("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = ? "
+                + "AND event_type = 'JOB_STARTING'", jobId));
+    }
+
+    @Test
+    void expiredRunningLeaseCannotReportFailureAfterReconciliation() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markStarting(identity, assignment.leaseId(), assignment.fencingToken());
+        execution.markRunning(identity, assignment.leaseId(), assignment.fencingToken());
+        makeLeaseExpired(assignment.leaseId());
+        expirations.expireNext().orElseThrow();
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> execution.markFailed(identity, assignment.leaseId(), assignment.fencingToken()));
+        assertEquals("RETRY_WAIT", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("LEASE_EXPIRED", value("SELECT state FROM job_attempts WHERE id = ?",
+                assignment.attemptId()));
     }
 
     private ProviderPeerIdentity peer(UUID nodeId, String serial) throws Exception {
