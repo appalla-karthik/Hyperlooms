@@ -2,6 +2,13 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 internal verified-input queue increment
+
+- V8 adds verified-input metadata and database constraints: version-1 jobs cannot enter `QUEUED` or active execution states without a complete matching snapshot record. Existing version-0 internal fixtures are preserved.
+- Added an internal `JobInputQueueService` that rechecks trusted requester subject, job state, manifest digest, and approved recipe after S3 staging, then atomically binds snapshot metadata, changes `CREATED` to `QUEUED`, and inserts one outbox event. Its result does not expose the private S3 key. It is not wired to an API or scheduler worker.
+- The focused live-PostgreSQL tests passed for queue/replay, wrong owner, corrupted bytes, cancellation during staging, recipe disabling during staging, and direct unverified database queue denial. An additional test queued a job through the real S3-compatible bucket and PostgreSQL in one internal flow. The V8 schema smoke passed and ended with `ROLLBACK`. Full control-plane `test integrationTest bootJar` passed locally: 33 unit tests and 41 integration tests, zero failures/skips, including the S3/PostgreSQL path and separate real-certificate mTLS tests.
+- Requester authentication, upload authorization, bucket write-once policy, orphan-snapshot cleanup, an approved runnable PyTorch recipe, and real GPU execution remain open. This internal queue path is not a public workflow.
+
 ## 2026-11-25 S3 input-snapshot increment
 
 - Added an internal S3-compatible adapter and bounded staging verifier. It checks the declared manifest digest, limits input to 8 MiB per file and 32 MiB total, hashes staged object bytes, writes a server-generated verified prefix, and reads back/hashes the copy before returning it. It does not alter job state.

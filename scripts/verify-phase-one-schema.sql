@@ -32,6 +32,11 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V7 versioned job request schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '8' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V8 verified input binding schema was not applied';
+    END IF;
 END;
 $$;
 
@@ -132,6 +137,18 @@ BEGIN
             ('00000000-0000-4000-8000-000000000304', 'phase-one-test',
              '00000000-0000-4000-8000-000000000201', 'bad-v1', repeat('d', 64), 1, NULL);
         RAISE EXCEPTION 'v1 job without input manifest digest was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+    BEGIN
+        INSERT INTO jobs
+            (id, requester_subject, recipe_id, state, idempotency_key,
+             request_sha256, request_version, input_manifest_sha256)
+        VALUES
+            ('00000000-0000-4000-8000-000000000305', 'phase-one-test',
+             '00000000-0000-4000-8000-000000000201', 'QUEUED', 'unverified-v1',
+             repeat('d', 64), 1, repeat('e', 64));
+        RAISE EXCEPTION 'v1 job queued without verified input was accepted';
     EXCEPTION WHEN check_violation THEN
         NULL;
     END;
