@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 S3 input-snapshot increment
+
+- Added an internal S3-compatible adapter and bounded staging verifier. It checks the declared manifest digest, limits input to 8 MiB per file and 32 MiB total, hashes staged object bytes, writes a server-generated verified prefix, and reads back/hashes the copy before returning it. It does not alter job state.
+- The focused verifier unit tests passed. The S3 integration test passed against the local private SeaweedFS-compatible bucket after its bootstrap, exercising the actual adapter and object round-trip. `bootJar` passed with the updated dependency locks.
+- No requester upload grant, authenticated caller, database snapshot binding, queue transition, bucket write-once policy, or orphan cleanup exists yet. A verified prefix returned by this helper is not evidence that a job is ready for execution.
+
 ## 2026-11-25 server manifest-contract increment
 
 - Added an internal Java parser for the Python SDK's exact canonical v1 manifest bytes. It bounds the payload to 64 KiB and 256 entries, validates sorted normalized paths and nonnegative signed-64-bit sizes, and rejects duplicate/extra fields and noncanonical JSON. A shared fixed digest vector catches cross-language drift.
