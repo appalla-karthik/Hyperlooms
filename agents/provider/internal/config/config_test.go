@@ -64,3 +64,15 @@ func TestLoadRequiresPrivateStateDirectoryForGrpc(t *testing.T) {
 		t.Fatalf("absolute state directory rejected: %v", err)
 	}
 }
+
+func TestLoadRuntimeRecoveryRequiresEnrolledAgent(t *testing.T) {
+	t.Setenv("HYPERLOOMS_AGENT_GRPC_ADDRESS", "")
+	t.Setenv("HYPERLOOMS_AGENT_RUNTIME_RECOVERY_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("recovery accepted without enrolled agent")
+	}
+	t.Setenv("HYPERLOOMS_AGENT_RUNTIME_RECOVERY_ENABLED", "yes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid recovery boolean accepted")
+	}
+}
