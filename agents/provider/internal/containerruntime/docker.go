@@ -17,10 +17,14 @@ import (
 )
 
 const (
-	minMemoryBytes   = 256 << 20
-	maxMemoryBytes   = 1 << 40
-	commandTimeout   = 15 * time.Second
-	maxCommandOutput = 32 << 10
+	minMemoryBytes    = 256 << 20
+	maxMemoryBytes    = 1 << 40
+	commandTimeout    = 15 * time.Second
+	maxCommandOutput  = 32 << 10
+	managedLabelKey   = "dev.hyperlooms.managed"
+	managedLabelValue = "provider-agent"
+	nodeLabelKey      = "dev.hyperlooms.node"
+	leaseLabelKey     = "dev.hyperlooms.lease"
 )
 
 var (
@@ -28,12 +32,13 @@ var (
 	gpuUUIDPattern       = regexp.MustCompile(`^GPU-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	digestPattern        = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	repositoryPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?/[a-z0-9]+(?:[._/-][a-z0-9]+)*$`)
-	containerNamePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+	containerNamePattern = regexp.MustCompile(`^hyperlooms-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-[0-9a-f]{16}$`)
 )
 
 // Spec is an internal, already-authorized local execution request. No network message creates one yet.
 // Image verification, artifact staging and executable command delivery are separate gates.
 type Spec struct {
+	NodeID         string
 	LeaseID        string
 	Image          string
 	GPUUUID        string
@@ -67,8 +72,7 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	if err := validate(spec); err != nil {
 		return Result{}, err
 	}
-	if !strings.HasPrefix(name, "hyperlooms-") || len(name) > 100 ||
-		!containerNamePattern.MatchString(name) {
+	if !managedContainerName(name, spec.LeaseID) {
 		return Result{}, fmt.Errorf("invalid managed container name")
 	}
 	deadline := spec.LeaseExpiresAt
@@ -82,7 +86,9 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	}
 	createArgs := []string{
 		"create", "--pull=never", "--name=" + name, "--platform=linux/amd64",
-		"--label=dev.hyperlooms.lease=" + spec.LeaseID,
+		"--label=" + managedLabelKey + "=" + managedLabelValue,
+		"--label=" + nodeLabelKey + "=" + spec.NodeID,
+		"--label=" + leaseLabelKey + "=" + spec.LeaseID,
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges=true", "--security-opt=seccomp=builtin",
 		"--pids-limit=256", "--memory=" + strconv.FormatInt(spec.MemoryBytes, 10),
@@ -91,13 +97,18 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 		"--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--log-driver=none",
 		"--init", "--restart=no", spec.Image,
 	}
-	if _, err := cli.run(runCtx, createArgs...); err != nil {
+	createdID, err := cli.run(runCtx, createArgs...)
+	if err != nil {
 		return Result{}, fmt.Errorf("create restricted container: %w", err)
+	}
+	createdID = strings.TrimSpace(createdID)
+	if !dockerIDPattern.MatchString(createdID) {
+		return Result{}, fmt.Errorf("Docker create did not return an exact container ID; manual recovery required for %s", name)
 	}
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), commandTimeout)
 		defer cleanupCancel()
-		_, cleanupErr := cli.run(cleanupCtx, "rm", "-f", name)
+		_, cleanupErr := cli.run(cleanupCtx, "rm", "-f", createdID)
 		if cleanupErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove managed container: %w", cleanupErr))
 		}
@@ -105,13 +116,13 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	if err := runCtx.Err(); err != nil {
 		return Result{}, err
 	}
-	if _, err := cli.run(runCtx, "start", name); err != nil {
+	if _, err := cli.run(runCtx, "start", createdID); err != nil {
 		return Result{}, fmt.Errorf("start restricted container: %w", err)
 	}
 	if err := runCtx.Err(); err != nil {
 		return Result{}, err
 	}
-	output, err := cli.run(runCtx, "wait", name)
+	output, err := cli.run(runCtx, "wait", createdID)
 	if err != nil {
 		return Result{}, fmt.Errorf("wait for restricted container: %w", err)
 	}
@@ -126,8 +137,9 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 }
 
 func validate(spec Spec) error {
-	if !leaseIDPattern.MatchString(spec.LeaseID) || !gpuUUIDPattern.MatchString(spec.GPUUUID) {
-		return fmt.Errorf("invalid lease or GPU UUID")
+	if !leaseIDPattern.MatchString(spec.NodeID) || !leaseIDPattern.MatchString(spec.LeaseID) ||
+		!gpuUUIDPattern.MatchString(spec.GPUUUID) {
+		return fmt.Errorf("invalid node, lease, or GPU UUID")
 	}
 	repository, digest, ok := strings.Cut(spec.Image, "@")
 	if !ok || !repositoryPattern.MatchString(repository) || !digestPattern.MatchString(digest) {
@@ -141,17 +153,23 @@ func validate(spec Spec) error {
 	return nil
 }
 
+func managedContainerName(name, leaseID string) bool {
+	match := containerNamePattern.FindStringSubmatch(name)
+	return len(match) == 2 && match[1] == leaseID
+}
+
 type dockerCLI struct{}
 
 func (dockerCLI) run(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	output := &boundedOutput{limit: maxCommandOutput}
-	cmd.Stdout = output
-	cmd.Stderr = output
+	stdout := &boundedOutput{limit: maxCommandOutput}
+	stderr := &boundedOutput{limit: maxCommandOutput}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return output.String(), fmt.Errorf("docker command failed: %w: %s", err, output.String())
+		return stdout.String(), fmt.Errorf("docker command failed: %w: %s", err, stderr.String())
 	}
-	return output.String(), nil
+	return stdout.String(), nil
 }
 
 type boundedOutput struct {

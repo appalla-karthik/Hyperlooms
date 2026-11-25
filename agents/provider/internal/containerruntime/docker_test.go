@@ -15,6 +15,7 @@ const (
 	testImage   = "registry.example.invalid/hyperlooms/pytorch@sha256:" +
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	testContainerName = "hyperlooms-cafe0000-0000-4000-8000-000000000001-0000000000000001"
+	testCreatedID     = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
 type fakeDocker struct {
@@ -22,6 +23,7 @@ type fakeDocker struct {
 	responses map[string]string
 	errors    map[string]error
 	onCall    func(string)
+	handle    func([]string) (string, error)
 }
 
 func (fake *fakeDocker) run(_ context.Context, args ...string) (string, error) {
@@ -29,11 +31,18 @@ func (fake *fakeDocker) run(_ context.Context, args ...string) (string, error) {
 	if fake.onCall != nil {
 		fake.onCall(args[0])
 	}
+	if fake.handle != nil {
+		return fake.handle(args)
+	}
+	if args[0] == "create" && fake.errors[args[0]] == nil && fake.responses[args[0]] == "" {
+		return testCreatedID, nil
+	}
 	return fake.responses[args[0]], fake.errors[args[0]]
 }
 
 func testSpec() Spec {
 	return Spec{
+		NodeID:  "cafe0000-0000-4000-8000-000000000002",
 		LeaseID: testLeaseID, Image: testImage, GPUUUID: testGPUUUID,
 		MemoryBytes: 2 << 30, MaxRuntime: time.Minute,
 		LeaseExpiresAt: time.Now().Add(2 * time.Minute),
@@ -57,6 +66,9 @@ func TestRestrictedDockerPlanAndCleanup(t *testing.T) {
 		"--security-opt=seccomp=builtin", "--pids-limit=256",
 		"--memory=2147483648", "--memory-swap=2147483648",
 		"--gpus=device=" + testGPUUUID, "--user=65532:65532",
+		"--label=" + managedLabelKey + "=" + managedLabelValue,
+		"--label=" + nodeLabelKey + "=" + testSpec().NodeID,
+		"--label=" + leaseLabelKey + "=" + testLeaseID,
 		"--log-driver=none", "--restart=no", testImage,
 	} {
 		if !contains(args, required) {
@@ -68,8 +80,21 @@ func TestRestrictedDockerPlanAndCleanup(t *testing.T) {
 			t.Fatalf("unsafe Docker option %q", forbidden)
 		}
 	}
-	if !reflect.DeepEqual(fake.calls[3], []string{"rm", "-f", testContainerName}) {
+	if !reflect.DeepEqual(fake.calls[3], []string{"rm", "-f", testCreatedID}) ||
+		!reflect.DeepEqual(fake.calls[1], []string{"start", testCreatedID}) ||
+		!reflect.DeepEqual(fake.calls[2], []string{"wait", testCreatedID}) {
 		t.Fatalf("managed container was not removed: %v", fake.calls[3])
+	}
+}
+
+func TestCreateWithoutExactIDDoesNotTargetNameForRemoval(t *testing.T) {
+	fake := &fakeDocker{responses: map[string]string{"create": "not-an-id"}}
+	if _, err := executeWith(context.Background(), testSpec(), fake, testContainerName); err == nil ||
+		!strings.Contains(err.Error(), "manual recovery required") {
+		t.Fatalf("invalid create output was accepted: %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("unexpected command after unverified create: %v", fake.calls)
 	}
 }
 
@@ -83,6 +108,7 @@ func TestNonzeroExitIsAWorkloadResult(t *testing.T) {
 
 func TestValidationRejectsUnpinnedOrExpiredWorkWithoutDocker(t *testing.T) {
 	bad := []Spec{
+		func() Spec { s := testSpec(); s.NodeID = "wrong"; return s }(),
 		func() Spec { s := testSpec(); s.Image = "ubuntu:latest"; return s }(),
 		func() Spec { s := testSpec(); s.GPUUUID = "GPU-test"; return s }(),
 		func() Spec { s := testSpec(); s.MemoryBytes = 0; return s }(),
@@ -96,6 +122,17 @@ func TestValidationRejectsUnpinnedOrExpiredWorkWithoutDocker(t *testing.T) {
 		if len(fake.calls) != 0 {
 			t.Fatalf("invalid spec reached Docker: %v", fake.calls)
 		}
+	}
+}
+
+func TestExecutionRejectsForeignContainerName(t *testing.T) {
+	fake := &fakeDocker{}
+	if _, err := executeWith(context.Background(), testSpec(), fake,
+		"hyperlooms-cafe0000-0000-4000-8000-000000000003-0000000000000001"); err == nil {
+		t.Fatal("accepted a container name for another lease")
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("foreign container name reached Docker: %v", fake.calls)
 	}
 }
 
