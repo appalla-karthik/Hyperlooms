@@ -30,6 +30,10 @@ class InputManifestV1Tests(unittest.TestCase):
             self.assertEqual(expected, first.canonical_bytes())
             self.assertEqual(first.canonical_bytes(), second.canonical_bytes())
             self.assertEqual(hashlib.sha256(expected).hexdigest(), first.sha256())
+            self.assertEqual(
+                "b79596acff3aa23683569154b052ff4543778fdb5999eaab3a5e1ba7c24375b4",
+                first.sha256(),
+            )
 
     def test_empty_manifest_is_valid_and_versioned(self):
         manifest = InputManifestV1(())

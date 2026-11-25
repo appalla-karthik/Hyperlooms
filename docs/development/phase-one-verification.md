@@ -2,10 +2,16 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 server manifest-contract increment
+
+- Added an internal Java parser for the Python SDK's exact canonical v1 manifest bytes. It bounds the payload to 64 KiB and 256 entries, validates sorted normalized paths and nonnegative signed-64-bit sizes, and rejects duplicate/extra fields and noncanonical JSON. A shared fixed digest vector catches cross-language drift.
+- Local `py -m unittest discover -s tests -v` passed: five tests passed; the Windows symlink test was skipped because the host cannot create a symlink. Full control-plane `test` passed: 29 unit tests, zero failures/skips.
+- This parser does not read S3, verify object bytes, establish requester identity, or transition a job to `QUEUED`. Server-side quotas and an immutable verified input snapshot are required before that transition is safe.
+
 ## 2026-11-25 Python input-manifest increment
 
 - Added a standard-library-only Python helper that produces deterministic v1 JSON manifest bytes and SHA-256 from selected local regular files. It validates relative paths, sorts entries, rejects duplicates and visible symlinks, and bounds entry count and manifest bytes. This is a client-side contract, not verified upload or execution.
-- `py -m unittest discover -s tests -v` passed locally: six tests, five passed and one symlink test skipped because this Windows host could not create a symlink. A Linux Python SDK CI job was added, but its remote result has not been observed yet.
+- `py -m unittest discover -s tests -v` passed locally: six tests, five passed and one symlink test skipped because this Windows host could not create a symlink. The new Linux Python SDK job passed in [Engineering quality run 45594560395](https://github.com/appalla-karthik/Hyperlooms/actions/runs/45594560395).
 - The Java v1 request contract was subsequently verified with the low-memory full control-plane test run below. Server-side manifest verification, artifact staging, and queueing remain unimplemented.
 
 ## 2026-11-25 versioned requester-contract increment
