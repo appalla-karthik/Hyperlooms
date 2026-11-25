@@ -15,6 +15,14 @@ go test ./...
 
 `preflight` is a read-only host-prerequisite report and needs no enrollment credentials. On the initial supported platform (Linux amd64), it checks NVIDIA GPU discovery and the Docker server platform. It exits `0` only when these limited prerequisites are observed; an unsupported or incomplete host exits `1` and still prints JSON. A passing report **does not** prove the Docker daemon is local, NVIDIA Container Toolkit can inject the GPU, the restricted container can run, or cleanup works. Do not enable runtime recovery or accept public workloads based on this command alone. Run it as the same OS user that will run the service, then complete the witnessed host smoke described in the Phase 1 roadmap. Jetson/ARM64 is not yet supported by this runtime; if that is the available test machine, start with the [Jetson host survey](../../docs/development/jetson-host-survey.md).
 
+To collect Jetson compatibility information without cloning the repository on that device, download and review the read-only survey script, then run it. It does not use `sudo`, start a container, or change settings:
+
+```sh
+curl -fsSLo hyperlooms-jetson-survey.sh https://raw.githubusercontent.com/appalla-karthik/Hyperlooms/main/scripts/jetson-host-survey.sh
+sed -n '1,200p' hyperlooms-jetson-survey.sh
+bash hyperlooms-jetson-survey.sh
+```
+
 Environment variables are documented in the repository `.env.example`.
 
 For a manual mTLS run, set `HYPERLOOMS_AGENT_STATE_DIR` to a dedicated absolute directory writable only by the agent user. On Linux, use mode `0700`; the journal and persistent `agent.lock` file are mode `0600`. An enrolled agent holds an OS file lock for its whole process lifetime; another process using the **same state directory** cannot start a session. Do not share, rename, or delete this directory or its lock file while the agent is enrolled. Use one persistent state directory per provider node. For example, a local Windows development run could use `D:\Hyperlooms-agent-state`. The systemd template supplies `/var/lib/hyperlooms-agent` automatically. A receipt is intentionally refused while a different unexpired lease is already journaled; lease recovery and execution lifecycle are not implemented yet.

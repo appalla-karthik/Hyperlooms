@@ -2,7 +2,15 @@
 
 The only presently available physical GPU test device is described as a Jetson Nano. This survey identifies its exact model and software stack before any ARM64 execution design is selected. It does **not** enroll the device, run a container, change Docker configuration, or qualify Phase 1 GPU execution.
 
-Run these commands in the Jetson's Ubuntu terminal as the user who would eventually run the agent. They do not require `sudo`. Share the output with the development team; redact a hostname if it appears. A missing file/package or Docker permission error is useful evidence, not a reason to install anything yet.
+Run the repository's [`scripts/jetson-host-survey.sh`](../../scripts/jetson-host-survey.sh) in the Jetson's Ubuntu terminal as the user who would eventually run the agent. It does not require `sudo`. Share its output with the development team. A missing file/package or Docker permission error is useful evidence, not a reason to install anything yet. Review the script before running it on your machine.
+
+```sh
+bash scripts/jetson-host-survey.sh
+```
+
+If the repository is not on the Jetson, use the single-file download and run instructions in the provider [README](../../agents/provider/README.md). The script does not write an output file; copy its terminal output into the conversation.
+
+Equivalent individual read-only checks, if you prefer not to download the script:
 
 ```sh
 uname -m
