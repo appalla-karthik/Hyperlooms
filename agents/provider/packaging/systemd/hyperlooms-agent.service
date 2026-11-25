@@ -9,11 +9,13 @@ Type=simple
 User=hyperlooms-agent
 Group=hyperlooms-agent
 EnvironmentFile=/etc/hyperlooms-agent/agent.env
+Environment=HYPERLOOMS_AGENT_STATE_DIR=/var/lib/hyperlooms-agent
 ExecStart=/usr/local/bin/hyperlooms-agent
 Restart=on-failure
 RestartSec=5s
 WorkingDirectory=/var/lib/hyperlooms-agent
 StateDirectory=hyperlooms-agent
+StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

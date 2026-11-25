@@ -1,6 +1,8 @@
 package config
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLoadUsesFoundationDefaults(t *testing.T) {
 	t.Setenv("HYPERLOOMS_AGENT_ID", "")
@@ -42,5 +44,23 @@ func TestLoadRejectsCredentialsWithoutAddress(t *testing.T) {
 	t.Setenv("HYPERLOOMS_AGENT_CLIENT_KEY", "client.key")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected incomplete gRPC configuration to fail")
+	}
+}
+
+func TestLoadRequiresPrivateStateDirectoryForGrpc(t *testing.T) {
+	t.Setenv("HYPERLOOMS_AGENT_GRPC_ADDRESS", "localhost:9090")
+	t.Setenv("HYPERLOOMS_AGENT_NODE_ID", "cafe0000-0000-4000-8000-000000000001")
+	t.Setenv("HYPERLOOMS_AGENT_SERVER_CA", "ca.pem")
+	t.Setenv("HYPERLOOMS_AGENT_CLIENT_CERT", "client.pem")
+	t.Setenv("HYPERLOOMS_AGENT_CLIENT_KEY", "client.key")
+	for _, invalid := range []string{"", "relative/state"} {
+		t.Setenv("HYPERLOOMS_AGENT_STATE_DIR", invalid)
+		if _, err := Load(); err == nil {
+			t.Fatalf("expected state directory %q to be rejected", invalid)
+		}
+	}
+	t.Setenv("HYPERLOOMS_AGENT_STATE_DIR", t.TempDir())
+	if _, err := Load(); err != nil {
+		t.Fatalf("absolute state directory rejected: %v", err)
 	}
 }

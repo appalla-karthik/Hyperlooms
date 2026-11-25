@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -25,6 +26,7 @@ type Config struct {
 	ServerCA      string
 	ClientCert    string
 	ClientKey     string
+	StateDir      string
 }
 
 func Load() (Config, error) {
@@ -37,6 +39,7 @@ func Load() (Config, error) {
 		ServerCA:      valueOrDefault("HYPERLOOMS_AGENT_SERVER_CA", ""),
 		ClientCert:    valueOrDefault("HYPERLOOMS_AGENT_CLIENT_CERT", ""),
 		ClientKey:     valueOrDefault("HYPERLOOMS_AGENT_CLIENT_KEY", ""),
+		StateDir:      valueOrDefault("HYPERLOOMS_AGENT_STATE_DIR", ""),
 	}
 
 	if strings.TrimSpace(cfg.AgentID) == "" {
@@ -55,6 +58,10 @@ func Load() (Config, error) {
 		}
 		if !canonicalNodeID.MatchString(cfg.NodeID) || cfg.ServerCA == "" || cfg.ClientCert == "" || cfg.ClientKey == "" {
 			return Config{}, fmt.Errorf("agent gRPC requires node ID, server CA, client certificate and key")
+		}
+		if cfg.StateDir == "" || !filepath.IsAbs(cfg.StateDir) ||
+			filepath.Dir(filepath.Clean(cfg.StateDir)) == filepath.Clean(cfg.StateDir) {
+			return Config{}, fmt.Errorf("agent gRPC requires an absolute, non-root HYPERLOOMS_AGENT_STATE_DIR")
 		}
 	} else if cfg.NodeID != "" || cfg.ServerCA != "" || cfg.ClientCert != "" || cfg.ClientKey != "" {
 		return Config{}, fmt.Errorf("agent gRPC address is required when credentials are configured")

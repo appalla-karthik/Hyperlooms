@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -59,10 +61,17 @@ func TestHeartbeatExchangeReceivesOfferWithoutStartingWork(t *testing.T) {
 		}},
 	}}
 	pending := map[string]string{}
+	journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if err := receiveHeartbeatAcknowledgement(exchange, "heartbeat-1", testNodeID,
-		testGPUs(), pending, logger); err != nil {
+		testGPUs(), pending, journal, logger); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(journal.dir, journalFile)); err != nil {
+		t.Fatalf("lease was acknowledged without durable journal: %v", err)
 	}
 	if len(exchange.sent) != 1 || exchange.sent[0].GetLeaseReceipt().GetLeaseId() != testLeaseID {
 		t.Fatalf("expected one transport receipt, got %v", exchange.sent)
@@ -83,11 +92,15 @@ func TestHeartbeatExchangeReceivesOfferWithoutStartingWork(t *testing.T) {
 		}},
 	}
 	if err := receiveHeartbeatAcknowledgement(exchange, "heartbeat-2", testNodeID,
-		testGPUs(), pending, logger); err != nil {
+		testGPUs(), pending, journal, logger); err != nil {
 		t.Fatal(err)
 	}
 	if len(pending) != 0 {
 		t.Fatalf("receipt acknowledgement was not cleared: %v", pending)
+	}
+	reopened, err := openLeaseJournal(journal.dir, testNodeID)
+	if err != nil || reopened.active == nil || reopened.active.ConfirmedAt == nil {
+		t.Fatalf("confirmed receipt did not survive reopening: %v", err)
 	}
 }
 
@@ -106,9 +119,13 @@ func TestInvalidOffersAreNotAcknowledged(t *testing.T) {
 			exchange := &fakeLeaseExchange{responses: []*agentv1.ConnectResponse{
 				{Body: &agentv1.ConnectResponse_LeaseOffer{LeaseOffer: offer}},
 			}}
+			journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			if err := receiveHeartbeatAcknowledgement(exchange, "heartbeat-1", testNodeID,
-				testGPUs(), map[string]string{}, logger); err == nil {
+				testGPUs(), map[string]string{}, journal, logger); err == nil {
 				t.Fatal("expected invalid offer to close the exchange")
 			}
 			if len(exchange.sent) != 0 {

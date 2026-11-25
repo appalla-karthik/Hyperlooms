@@ -53,6 +53,10 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	if err != nil {
 		return fmt.Errorf("load client certificate: %w", err)
 	}
+	journal, err := openLeaseJournal(cfg.StateDir, cfg.NodeID)
+	if err != nil {
+		return fmt.Errorf("open durable lease journal: %w", err)
+	}
 	gpus, err := DiscoverGPUs(ctx)
 	if err != nil {
 		return err
@@ -126,7 +130,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
 			err := receiveHeartbeatAcknowledgement(stream, requestID, cfg.NodeID,
-				gpus, pendingReceipts, logger)
+				gpus, pendingReceipts, journal, logger)
 			ackTimeout.Stop()
 			if err != nil {
 				return fmt.Errorf("heartbeat exchange: %w", err)

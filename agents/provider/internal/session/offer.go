@@ -18,7 +18,8 @@ type leaseExchange interface {
 }
 
 func receiveHeartbeatAcknowledgement(stream leaseExchange, requestID, nodeID string,
-	gpus []*agentv1.GpuCapability, pending map[string]string, logger *slog.Logger) error {
+	gpus []*agentv1.GpuCapability, pending map[string]string, journal *leaseJournal,
+	logger *slog.Logger) error {
 	for messageCount := 0; messageCount < 8; messageCount++ {
 		response, err := stream.Recv()
 		if err != nil {
@@ -26,13 +27,17 @@ func receiveHeartbeatAcknowledgement(stream leaseExchange, requestID, nodeID str
 		}
 		switch {
 		case response.GetLeaseOffer() != nil:
-			if err := receiveOffer(stream, response.GetLeaseOffer(), nodeID, gpus, pending, logger); err != nil {
+			if err := receiveOffer(stream, response.GetLeaseOffer(), nodeID, gpus, pending, journal, logger); err != nil {
 				return err
 			}
 		case response.GetLeaseReceiptAcknowledgement() != nil:
 			ack := response.GetLeaseReceiptAcknowledgement()
-			if leaseID, ok := pending[ack.GetRequestMessageId()]; !ok || leaseID != ack.GetLeaseId() {
+			leaseID, ok := pending[ack.GetRequestMessageId()]
+			if !ok || leaseID != ack.GetLeaseId() {
 				return fmt.Errorf("unexpected lease receipt acknowledgement")
+			}
+			if err := journal.confirm(leaseID); err != nil {
+				return err
 			}
 			delete(pending, ack.GetRequestMessageId())
 		case response.GetHeartbeatAcknowledgement() != nil:
@@ -48,7 +53,8 @@ func receiveHeartbeatAcknowledgement(stream leaseExchange, requestID, nodeID str
 }
 
 func receiveOffer(stream leaseExchange, offer *agentv1.LeaseOffer, nodeID string,
-	gpus []*agentv1.GpuCapability, pending map[string]string, logger *slog.Logger) error {
+	gpus []*agentv1.GpuCapability, pending map[string]string, journal *leaseJournal,
+	logger *slog.Logger) error {
 	if offer.GetNodeId() != nodeID || !validUUID(offer.GetJobId()) ||
 		!validUUID(offer.GetAttemptId()) || !validUUID(offer.GetLeaseId()) ||
 		offer.GetFencingToken() == 0 || offer.GetFencingToken() > math.MaxInt64 ||
@@ -66,7 +72,10 @@ func receiveOffer(stream leaseExchange, offer *agentv1.LeaseOffer, nodeID string
 	if !foundGPU || len(pending) >= 4 {
 		return fmt.Errorf("lease offer GPU unavailable or receipt backlog full")
 	}
-	// A receipt proves transport delivery only. There is no execution runtime yet.
+	// Persist and sync before admitting receipt. There is no execution runtime yet.
+	if err := journal.store(offer); err != nil {
+		return fmt.Errorf("persist lease offer before receipt: %w", err)
+	}
 	requestID := "receipt-" + offer.GetLeaseId()
 	if err := stream.Send(&agentv1.ConnectRequest{
 		MessageId: requestID,

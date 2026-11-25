@@ -38,4 +38,10 @@ Do not mark the provider network or Phase 1 as production-ready based on these c
 
 - Pinned Buf 1.50.0 formatted, linted, built, and regenerated the versioned Protobuf contract and Go stubs.
 - Full control-plane `test integrationTest` passed against PostgreSQL. The claim/expiry/receipt suite reports ten tests, and the real-certificate mTLS suite reports four tests, all with zero failures or skips. The new mTLS test sends an issued-lease offer after heartbeat, receives a transport receipt, and verifies the database `ACKNOWLEDGED` state.
-- Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4. Agent tests cover offer identity/GPU/token/expiry validation, receipt emission, and response correlation. These are transport tests only; the offer is not locally persisted and they do not run a GPU workload or qualify a Linux NVIDIA host.
+- Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4. Agent tests cover offer identity/GPU/token/expiry validation, receipt emission, and response correlation. These were transport tests only; they did not run a GPU workload or qualify a Linux NVIDIA host. Local receipt persistence was added in the next increment.
+
+## 2026-11-25 local receipt journal increment
+
+- The agent now opens a private persistent state directory before its mTLS session, atomically writes and syncs an offered lease before emitting a receipt, and persists receipt confirmation. Startup rejects corrupt or foreign-node state. An unexpired conflicting lease blocks another receipt.
+- Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4 on Windows. Tests cover restart/duplicate receipt, confirmation persistence, conflicting and expired offers, invalid journal state, and no receipt when the journal write fails.
+- Windows tests do not verify Linux directory-sync semantics or service-user permissions. No Linux NVIDIA host qualification or execution test was performed. This journal is not a workload runtime or recovery worker.
