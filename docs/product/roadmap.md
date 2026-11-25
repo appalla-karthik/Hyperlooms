@@ -21,7 +21,7 @@ Status: in progress. Durable execution state, an agent hello/heartbeat/transport
 
 ### Remaining Phase 1 subphases (exit gates, not dates)
 
-1. **1A — Host qualification:** a read-only provider preflight, then a witnessed Linux amd64 NVIDIA Container Toolkit and restricted-container smoke on the actual provider host. The preflight alone cannot qualify execution. Jetson/ARM64 is a separate compatibility track.
+1. **1A — Host qualification:** a read-only provider preflight, then a witnessed Linux amd64 NVIDIA Container Toolkit and restricted-container smoke on the actual provider host. The preflight alone cannot qualify execution. The only currently available physical device is a Jetson Nano; its [read-only host survey](../development/jetson-host-survey.md) starts a separate ARM64 compatibility track and does not satisfy the amd64 exit gate.
 2. **1B — Trusted provider:** production certificate issuance and operator authorization, verified hardware evidence, and an explicit, revocable `AVAILABLE` transition. A GPU report must never grant availability by itself.
 3. **1C — Requester intake:** authenticated requester identity, canonical versioned job request/idempotency contract, approved PyTorch recipe, private input staging, and guarded `CREATED -> QUEUED` transition.
 4. **1D — Orchestration:** bounded scheduler worker, fenced executable lease command, agent-side durable acceptance, renewal/expiry/cancellation, and safe stop/quarantine behavior across disconnects.

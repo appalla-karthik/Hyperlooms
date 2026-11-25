@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 Jetson compatibility discovery
+
+- The only presently available physical GPU test device is a Jetson Nano. Added a [read-only host survey](jetson-host-survey.md) to distinguish the exact model and JetPack/L4T stack before designing an ARM64 runtime.
+- A `CGO_ENABLED=0 GOOS=linux GOARCH=arm64` provider-agent build passed in the Go 1.27.4 Linux container. The binary was **not** run on the Jetson. No ARM64 GPU discovery, container execution, isolation, image compatibility, or resource accounting was tested.
+- The current amd64 discrete-GPU preflight and runtime remain unchanged. The Jetson is offline/unschedulable and cannot close Phase 1A until its separate compatibility path has real host evidence.
+
 ## 2026-11-25 host-preflight increment
 
 - Added a read-only `hyperlooms-agent preflight` JSON report for the initial Linux amd64 provider target. It checks platform, strict NVIDIA GPU discovery, and a compatible Docker server response; it does not create or remove containers.
