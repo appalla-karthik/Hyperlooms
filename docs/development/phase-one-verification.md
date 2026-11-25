@@ -57,3 +57,10 @@ Do not mark the provider network or Phase 1 as production-ready based on these c
 - Added internal-only start/running/failure transactions guarded by the authenticated provider identity, active certificate, matching node and fencing token, acknowledged unexpired lease, busy provider, and matching job/attempt states. Failure quarantines the node; no success transition exists before artifact verification.
 - Control-plane `test integrationTest` passed with Java 17 against the local PostgreSQL container. The new live database tests cover unacknowledged denial, idempotent state progress and outbox events, explicit failure, wrong peer/token, revoked certificate, expired lease, and rejection of a late report after expiry reconciliation. These tests use certificate identity doubles; the existing separate real-certificate mTLS test still covers transport only.
 - No agent RPC invokes these transactions. No container, GPU workload, result artifact, or Linux NVIDIA host was tested. The system remains non-executable.
+
+## 2026-11-25 internal container-runtime foundation
+
+- Added an unconnected Linux amd64 Docker runtime planner/executor. It only accepts digest-pinned images and canonical NVIDIA GPU UUIDs, uses restrictive container settings, enforces a lease/runtime deadline, and attempts explicit cleanup after create/start/wait.
+- Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4 on Windows. Fake-Docker tests cover command restrictions, nonzero workload exit, invalid specs rejected before Docker, cleanup after start failure, cleanup-error reporting, cancellation cleanup, and bounded CLI output.
+- No real Docker GPU container was run. No image signature verification, artifact staging, logs, crash-orphan recovery, or hostile-image isolation test exists. The agent session does not invoke this package. This is not yet a working remote GPU job.
+- A local `GOOS=linux GOARCH=amd64` cross-build was attempted but could not complete because the temporary Windows Go distribution lacked `pkg/include/textflag.h`; this is a local toolchain limitation, not a passing Linux build result.
