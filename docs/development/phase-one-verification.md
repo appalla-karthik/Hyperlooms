@@ -2,6 +2,26 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 Python input-manifest increment
+
+- Added a standard-library-only Python helper that produces deterministic v1 JSON manifest bytes and SHA-256 from selected local regular files. It validates relative paths, sorts entries, rejects duplicates and visible symlinks, and bounds entry count and manifest bytes. This is a client-side contract, not verified upload or execution.
+- `py -m unittest discover -s tests -v` passed locally: six tests, five passed and one symlink test skipped because this Windows host could not create a symlink. A Linux Python SDK CI job was added, but its remote result has not been observed yet.
+- The Java v1 request contract was subsequently verified with the low-memory full control-plane test run below. Server-side manifest verification, artifact staging, and queueing remain unimplemented.
+
+## 2026-11-25 versioned requester-contract increment
+
+- Replaced caller-supplied request hashes in internal job submission with a server-computed, fixed UTF-8 v1 representation of recipe ID and declared input-manifest SHA-256. V7 adds request version and manifest-digest fields while preserving legacy internal rows as version 0. New submissions remain `CREATED`, not schedulable.
+- Main and test Java sources compiled. A low-memory JShell run produced the fixed canonical-hash test vector. Initial Gradle attempts ran out of native memory; one retry also used an insufficient 128 MiB Metaspace cap.
+- With one Gradle worker and bounded JVM/test heaps, the full control-plane suite then passed against live PostgreSQL: 24 unit tests and 34 integration tests, zero failures/skips, including four real-certificate mTLS tests. The V7 schema smoke passed and ended with `ROLLBACK`. The new integration case rejects replaying a legacy version-0 row as a v1 request.
+- No requester authentication, uploaded manifest verification, approved runnable PyTorch recipe, or `CREATED -> QUEUED` transition exists yet.
+
+## 2026-11-25 manual GPU review gate
+
+- Added a trusted local operator inspection/approval path for a certificate-bound provider's reported GPU. A deterministic report fingerprint and operator-supplied digest of externally retained evidence are recorded with reviewer text in `provider_gpu_reviews`; the GPU becomes `VERIFIED`, but the node remains `OFFLINE` and cannot be scheduled. The service does not attest hardware, verify evidence custody, or authenticate the reviewer.
+- Control-plane unit tests passed. New live PostgreSQL tests passed for review audit/outbox recording, duplicate denial, unchanged re-report, changed-report invalidation, malformed evidence, stale heartbeat, and revoked-node denial. The V6 schema smoke passed with a final `ROLLBACK`.
+- The full control-plane integration suite passed against local PostgreSQL: 33 tests, zero failures/skips, including four real-certificate mTLS tests. An initial full-suite run failed only because a comment in already-applied V6 was changed, causing a Flyway checksum mismatch; the exact applied migration was restored and the rerun passed.
+- No physical GPU was approved or tested. Evidence collection/custody, authenticated operator identity, database-level audit immutability, safe `AVAILABLE` transition, and real Linux NVIDIA/Jetson qualification remain open.
+
 ## 2026-11-25 Jetson compatibility discovery
 
 - The only presently available physical GPU test device is a Jetson Nano. Added a [read-only host survey](jetson-host-survey.md) to distinguish the exact model and JetPack/L4T stack before designing an ARM64 runtime.

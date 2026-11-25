@@ -22,6 +22,16 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V5 staged certificate rotation schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '6' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V6 GPU review audit schema was not applied';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '7' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V7 versioned job request schema was not applied';
+    END IF;
 END;
 $$;
 
@@ -72,6 +82,29 @@ VALUES (
     8589934592, 'test-driver', 'test-cuda', 'VERIFIED', CURRENT_TIMESTAMP
 );
 
+INSERT INTO provider_gpu_reviews
+    (id, node_id, gpu_uuid, report_sha256, evidence_sha256, reviewer_subject, decision)
+VALUES
+    ('00000000-0000-4000-8000-000000000121',
+     '00000000-0000-4000-8000-000000000101', 'GPU-phase-one-test',
+     repeat('a', 64), repeat('b', 64), 'phase-one-operator', 'APPROVED');
+
+DO $$
+BEGIN
+    BEGIN
+        INSERT INTO provider_gpu_reviews
+            (id, node_id, gpu_uuid, report_sha256, evidence_sha256, reviewer_subject, decision)
+        VALUES
+            ('00000000-0000-4000-8000-000000000122',
+             '00000000-0000-4000-8000-000000000101', 'GPU-phase-one-test',
+             'invalid', repeat('b', 64), 'phase-one-operator', 'APPROVED');
+        RAISE EXCEPTION 'invalid GPU report digest was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END;
+$$;
+
 INSERT INTO workload_recipes (
     id, name, image_repository, image_digest, max_runtime_seconds,
     min_vram_bytes, state, approved_at
@@ -88,6 +121,22 @@ VALUES
      '00000000-0000-4000-8000-000000000201', 'LEASED', 'first-request', repeat('b', 64)),
     ('00000000-0000-4000-8000-000000000302', 'phase-one-test',
      '00000000-0000-4000-8000-000000000201', 'LEASED', 'second-request', repeat('c', 64));
+
+DO $$
+BEGIN
+    BEGIN
+        INSERT INTO jobs
+            (id, requester_subject, recipe_id, idempotency_key, request_sha256,
+             request_version, input_manifest_sha256)
+        VALUES
+            ('00000000-0000-4000-8000-000000000304', 'phase-one-test',
+             '00000000-0000-4000-8000-000000000201', 'bad-v1', repeat('d', 64), 1, NULL);
+        RAISE EXCEPTION 'v1 job without input manifest digest was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END;
+$$;
 
 DO $$
 BEGIN

@@ -18,12 +18,15 @@ public final class ProviderOperatorCommands {
     private final ProviderEnrollmentService enrollment;
     private final ProviderIdentityService identities;
     private final OperatorCertificateVerifier certificates;
+    private final ProviderHardwareReviewService hardwareReviews;
 
     public ProviderOperatorCommands(ProviderEnrollmentService enrollment,
-            ProviderIdentityService identities, OperatorCertificateVerifier certificates) {
+            ProviderIdentityService identities, OperatorCertificateVerifier certificates,
+            ProviderHardwareReviewService hardwareReviews) {
         this.enrollment = enrollment;
         this.identities = identities;
         this.certificates = certificates;
+        this.hardwareReviews = hardwareReviews;
     }
 
     public String execute(String[] args, InputStream input) throws IOException {
@@ -67,6 +70,22 @@ public final class ProviderOperatorCommands {
                 requireLength(args, 2);
                 yield "REVOKED=" + identities.revokeNode(UUID.fromString(args[1]));
             }
+            case "inspect-gpu" -> {
+                requireLength(args, 3);
+                ProviderHardwareReviewService.Candidate candidate = hardwareReviews.inspect(
+                        UUID.fromString(args[1]), args[2]);
+                yield "NODE_ID=" + candidate.nodeId() + "\nGPU_UUID=" + candidate.gpuUuid()
+                        + "\nMODEL=" + candidate.model() + "\nVRAM_BYTES=" + candidate.vramBytes()
+                        + "\nDRIVER_VERSION=" + candidate.driverVersion()
+                        + "\nCUDA_VERSION=" + candidate.cudaVersion()
+                        + "\nVERIFICATION_STATE=" + candidate.state()
+                        + "\nREPORT_SHA256=" + candidate.reportSha256();
+            }
+            case "approve-gpu" -> {
+                requireLength(args, 6);
+                hardwareReviews.approve(UUID.fromString(args[1]), args[2], args[3], args[4], args[5]);
+                yield "GPU_REVIEW_RECORDED=" + args[2] + "\nNODE_REMAINS_OFFLINE=true";
+            }
             default -> throw new IllegalArgumentException(usage());
         };
     }
@@ -80,6 +99,8 @@ public final class ProviderOperatorCommands {
     private static String usage() {
         return "operator <issue-invite OWNER TTL_MINUTES | redeem-invite (token on stdin) "
                 + "| revoke-invite INVITE_ID | bind-certificate NODE_ID CERT_PEM "
-                + "| stage-rotation NODE_ID CERT_PEM | revoke-node NODE_ID>";
+                + "| stage-rotation NODE_ID CERT_PEM | revoke-node NODE_ID "
+                + "| inspect-gpu NODE_ID GPU_UUID "
+                + "| approve-gpu NODE_ID GPU_UUID REPORT_SHA256 EVIDENCE_SHA256 REVIEWER_SUBJECT>";
     }
 }

@@ -9,17 +9,19 @@ import org.junit.jupiter.api.Test;
 class JobSubmissionCommandTest {
 
     @Test
-    void rejectsMissingOrMalformedIdentityAndRequestHash() {
+    void rejectsMissingIdentityAndMalformedVersionedRequest() {
         UUID recipeId = UUID.randomUUID();
         String digest = "a".repeat(64);
 
         assertThrows(IllegalArgumentException.class,
-                () -> new JobSubmissionCommand(" ", recipeId, "key", digest));
+                () -> new JobSubmissionCommand(" ", "key", new JobRequestV1(recipeId, digest)));
         assertThrows(IllegalArgumentException.class,
-                () -> new JobSubmissionCommand("requester", recipeId, " ", digest));
+                () -> new JobSubmissionCommand("requester", " ", new JobRequestV1(recipeId, digest)));
         assertThrows(IllegalArgumentException.class,
-                () -> new JobSubmissionCommand("requester", null, "key", digest));
+                () -> new JobSubmissionCommand("requester", "key", null));
         assertThrows(IllegalArgumentException.class,
-                () -> new JobSubmissionCommand("requester", recipeId, "key", "not-a-sha256"));
+                () -> new JobRequestV1(null, digest));
+        assertThrows(IllegalArgumentException.class,
+                () -> new JobRequestV1(recipeId, "not-a-sha256"));
     }
 }

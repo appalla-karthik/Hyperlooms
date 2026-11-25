@@ -40,47 +40,58 @@ public class JobSubmissionService {
         }
 
         List<String> recipeStates = jdbc.queryForList(
-                "SELECT state FROM workload_recipes WHERE id = ?", String.class, command.recipeId());
+                "SELECT state FROM workload_recipes WHERE id = ?", String.class,
+                command.request().recipeId());
         if (recipeStates.isEmpty() || !"APPROVED".equals(recipeStates.get(0))) {
             throw new RecipeUnavailableException();
         }
 
         UUID jobId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO jobs (id, requester_subject, recipe_id, state, idempotency_key, request_sha256)
-                VALUES (?, ?, ?, 'CREATED', ?, ?)
-                """, jobId, command.requesterSubject(), command.recipeId(),
-                command.idempotencyKey(), command.requestSha256());
+                INSERT INTO jobs (id, requester_subject, recipe_id, state, idempotency_key,
+                                  request_sha256, request_version, input_manifest_sha256)
+                VALUES (?, ?, ?, 'CREATED', ?, ?, 1, ?)
+                """, jobId, command.requesterSubject(), command.request().recipeId(),
+                command.idempotencyKey(), command.request().requestSha256(),
+                command.request().inputManifestSha256());
         jdbc.update("""
                 INSERT INTO outbox_events
                     (id, event_key, aggregate_type, aggregate_id, event_type, payload)
                 VALUES (?, ?, 'JOB', ?, 'JOB_CREATED',
                     jsonb_build_object('jobId', CAST(? AS text), 'recipeId', CAST(? AS text)))
-                """, UUID.randomUUID(), "job:" + jobId + ":created", jobId, jobId, command.recipeId());
+                """, UUID.randomUUID(), "job:" + jobId + ":created", jobId, jobId,
+                command.request().recipeId());
         return new JobSubmissionResult(jobId, JobState.CREATED, false);
     }
 
     private StoredJob findByRequesterAndKey(JobSubmissionCommand command) {
         List<StoredJob> matches = jdbc.query("""
-                SELECT id, recipe_id, request_sha256, state
+                SELECT id, recipe_id, request_sha256, request_version,
+                       input_manifest_sha256, state
                 FROM jobs WHERE requester_subject = ? AND idempotency_key = ?
                 """, (rs, row) -> new StoredJob(
                 rs.getObject("id", UUID.class),
                 rs.getObject("recipe_id", UUID.class),
                 rs.getString("request_sha256").trim(),
+                rs.getInt("request_version"),
+                rs.getString("input_manifest_sha256") == null ? null
+                        : rs.getString("input_manifest_sha256").trim(),
                 JobState.valueOf(rs.getString("state"))),
                 command.requesterSubject(), command.idempotencyKey());
         return matches.isEmpty() ? null : matches.get(0);
     }
 
     private JobSubmissionResult replayOrConflict(JobSubmissionCommand command, StoredJob existing) {
-        if (!existing.recipeId().equals(command.recipeId())
-                || !existing.requestSha256().equals(command.requestSha256())) {
+        if (existing.requestVersion() != 1
+                || !existing.recipeId().equals(command.request().recipeId())
+                || !existing.inputManifestSha256().equals(command.request().inputManifestSha256())
+                || !existing.requestSha256().equals(command.request().requestSha256())) {
             throw new IdempotencyConflictException();
         }
         return new JobSubmissionResult(existing.id(), existing.state(), true);
     }
 
-    private record StoredJob(UUID id, UUID recipeId, String requestSha256, JobState state) {
+    private record StoredJob(UUID id, UUID recipeId, String requestSha256,
+            int requestVersion, String inputManifestSha256, JobState state) {
     }
 }

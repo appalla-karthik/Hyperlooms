@@ -23,6 +23,10 @@ Thumbs.db
 agents/provider/bin/
 coverage.out
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Node / Next.js
 node_modules/
 .next/

@@ -75,6 +75,7 @@ tasks.named<Test>("test") {
     useJUnitPlatform {
         excludeTags("integration")
     }
+    System.getenv("HYPERLOOMS_TEST_HEAP")?.let { maxHeapSize = it }
 }
 
 tasks.register<Test>("integrationTest") {

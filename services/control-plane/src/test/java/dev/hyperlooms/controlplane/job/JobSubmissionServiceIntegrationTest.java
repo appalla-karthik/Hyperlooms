@@ -48,7 +48,8 @@ class JobSubmissionServiceIntegrationTest {
     void approvedRecipeCreatesOneDurableJobAndOutboxEvent() {
         UUID recipeId = recipe("APPROVED");
         String requester = "integration:" + UUID.randomUUID();
-        JobSubmissionCommand command = new JobSubmissionCommand(requester, recipeId, "request-1", DIGEST);
+        JobSubmissionCommand command = new JobSubmissionCommand(
+                requester, "request-1", new JobRequestV1(recipeId, DIGEST));
 
         JobSubmissionResult first = submissions.submit(command);
         JobSubmissionResult replay = submissions.submit(command);
@@ -58,6 +59,10 @@ class JobSubmissionServiceIntegrationTest {
         assertFalse(first.replayed());
         assertTrue(replay.replayed());
         assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE recipe_id = ?", recipeId));
+        assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE recipe_id = ? "
+                + "AND request_version = 1 AND input_manifest_sha256 = ?", recipeId, DIGEST));
+        assertEquals(command.request().requestSha256(), jdbc.queryForObject(
+                "SELECT request_sha256 FROM jobs WHERE id = ?", String.class, first.jobId()).trim());
         assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
                 + "WHERE aggregate_id = ? AND event_type = 'JOB_CREATED'", first.jobId()));
     }
@@ -67,12 +72,31 @@ class JobSubmissionServiceIntegrationTest {
         UUID firstRecipe = recipe("APPROVED");
         UUID secondRecipe = recipe("APPROVED");
         String requester = "integration:" + UUID.randomUUID();
-        submissions.submit(new JobSubmissionCommand(requester, firstRecipe, "request-1", DIGEST));
+        submissions.submit(new JobSubmissionCommand(
+                requester, "request-1", new JobRequestV1(firstRecipe, DIGEST)));
 
         assertThrows(IdempotencyConflictException.class, () -> submissions.submit(
-                new JobSubmissionCommand(requester, firstRecipe, "request-1", "b".repeat(64))));
+                new JobSubmissionCommand(requester, "request-1",
+                        new JobRequestV1(firstRecipe, "b".repeat(64)))));
         assertThrows(IdempotencyConflictException.class, () -> submissions.submit(
-                new JobSubmissionCommand(requester, secondRecipe, "request-1", DIGEST)));
+                new JobSubmissionCommand(requester, "request-1",
+                        new JobRequestV1(secondRecipe, DIGEST))));
+        assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE requester_subject = ?", requester));
+    }
+
+    @Test
+    void legacyUnversionedJobCannotReplayAsVersionOne() {
+        UUID recipeId = recipe("APPROVED");
+        String requester = "integration:" + UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO jobs
+                    (id, requester_subject, recipe_id, state, idempotency_key, request_sha256)
+                VALUES (?, ?, ?, 'CREATED', 'legacy-key', ?)
+                """, UUID.randomUUID(), requester, recipeId, "a".repeat(64));
+
+        assertThrows(IdempotencyConflictException.class, () -> submissions.submit(
+                new JobSubmissionCommand(requester, "legacy-key",
+                        new JobRequestV1(recipeId, DIGEST))));
         assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE requester_subject = ?", requester));
     }
 
@@ -82,9 +106,10 @@ class JobSubmissionServiceIntegrationTest {
         String requester = "integration:" + UUID.randomUUID();
 
         assertThrows(RecipeUnavailableException.class, () -> submissions.submit(
-                new JobSubmissionCommand(requester, draftRecipe, "draft", DIGEST)));
+                new JobSubmissionCommand(requester, "draft", new JobRequestV1(draftRecipe, DIGEST))));
         assertThrows(RecipeUnavailableException.class, () -> submissions.submit(
-                new JobSubmissionCommand(requester, UUID.randomUUID(), "unknown", DIGEST)));
+                new JobSubmissionCommand(requester, "unknown",
+                        new JobRequestV1(UUID.randomUUID(), DIGEST))));
         assertEquals(0L, count("SELECT COUNT(*) FROM jobs WHERE requester_subject = ?", requester));
     }
 
@@ -92,7 +117,8 @@ class JobSubmissionServiceIntegrationTest {
     void concurrentRetriesStillCreateOnlyOneJob() throws Exception {
         UUID recipeId = recipe("APPROVED");
         JobSubmissionCommand command = new JobSubmissionCommand(
-                "integration:" + UUID.randomUUID(), recipeId, "concurrent", DIGEST);
+                "integration:" + UUID.randomUUID(), "concurrent",
+                new JobRequestV1(recipeId, DIGEST));
         CountDownLatch start = new CountDownLatch(1);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -132,8 +158,8 @@ class JobSubmissionServiceIntegrationTest {
         return id;
     }
 
-    private long count(String query, Object argument) {
-        Long result = jdbc.queryForObject(query, Long.class, argument);
+    private long count(String query, Object... arguments) {
+        Long result = jdbc.queryForObject(query, Long.class, arguments);
         return result == null ? 0 : result;
     }
 }

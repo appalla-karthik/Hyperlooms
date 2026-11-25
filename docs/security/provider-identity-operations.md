@@ -32,6 +32,22 @@ java -jar build/libs/hyperlooms-control-plane-0.1.0-SNAPSHOT.jar operator bind-c
 
 The node remains `PENDING/OFFLINE` until that exact certificate completes mTLS and its first valid hello. The agent needs `HYPERLOOMS_AGENT_GRPC_ADDRESS`, `HYPERLOOMS_AGENT_NODE_ID`, `HYPERLOOMS_AGENT_SERVER_CA`, `HYPERLOOMS_AGENT_CLIENT_CERT`, and `HYPERLOOMS_AGENT_CLIENT_KEY`. Protect the client key with host-level permissions. No GPU is made available merely by connecting.
 
+## Manual hardware review (not host attestation)
+
+Only a trusted operator with independently witnessed host evidence should use the following commands. First inspect the current GPU report:
+
+```text
+java -jar build/libs/hyperlooms-control-plane-0.1.0-SNAPSHOT.jar operator inspect-gpu NODE_ID GPU_UUID
+```
+
+Compare the model, UUID, VRAM, driver, and CUDA report with evidence obtained independently from the host. Retain that evidence in an access-controlled store and calculate the SHA-256 of its exact bytes. The current system neither collects nor validates that evidence; entering an arbitrary digest would be a false approval. Record the reviewer identity and approve only the inspected report fingerprint:
+
+```text
+java -jar build/libs/hyperlooms-control-plane-0.1.0-SNAPSHOT.jar operator approve-gpu NODE_ID GPU_UUID REPORT_SHA256 EVIDENCE_SHA256 REVIEWER_SUBJECT
+```
+
+The transaction refuses stale, changed, missing, already-reviewed, or revoked reports. It inserts a historical review row and an outbox event. A changed or missing subsequent GPU report clears the current approval while preserving its review history. The node stays `OFFLINE`; this command cannot expose GPU capacity to scheduling. `REVIEWER_SUBJECT` is supplied by the command caller and is **not authenticated by this application**; production use requires operator SSO/RBAC, restricted machine access, database-level audit immutability, and audited evidence custody. Do not approve the Jetson Nano or any other physical device until the relevant host qualification actually passes.
+
 ## Rotation and emergency revocation
 
 Issue a new client certificate for the same node ID with a new private key, then stage it:
