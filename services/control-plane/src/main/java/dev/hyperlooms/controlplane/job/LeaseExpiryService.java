@@ -9,8 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Reconciles one expired active lease at a time. No background poller invokes
- * this yet; command delivery and stale-result fencing must precede activation.
+ * Reconciles one expired active lease at a time. The opt-in background poller
+ * calls this transaction; an expiry is not proof of remote process shutdown.
  */
 @Service
 public class LeaseExpiryService {

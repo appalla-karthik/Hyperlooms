@@ -2,7 +2,7 @@
 
 Community-owned, verifiable GPU compute for AI workloads.
 
-> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema and opt-in, certificate-authenticated hello/heartbeat/lease-offer transport exist. A real-certificate mTLS offer/receipt test passes, and the agent now journals a transport receipt before sending it. Production PKI, Linux NVIDIA qualification, an execution runtime, and live GPU execution are pending. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
+> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema and opt-in, certificate-authenticated hello/heartbeat/lease-offer transport exist. A real-certificate mTLS offer/receipt test passes, the agent journals a transport receipt before sending it, and a bounded lease-expiry poller is available but disabled by default. Production PKI, Linux NVIDIA qualification, an execution runtime, and live GPU execution are pending. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
 
 HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
 

@@ -53,6 +53,9 @@ springdoc:
     tags-sorter: alpha
 
 hyperlooms:
+  lease-expiry:
+    enabled: ${HYPERLOOMS_LEASE_EXPIRY_ENABLED:false}
+    poll-interval-ms: ${HYPERLOOMS_LEASE_EXPIRY_POLL_INTERVAL_MS:5000}
   agent-grpc:
     enabled: ${HYPERLOOMS_AGENT_GRPC_ENABLED:false}
     port: ${HYPERLOOMS_AGENT_GRPC_PORT:9090}

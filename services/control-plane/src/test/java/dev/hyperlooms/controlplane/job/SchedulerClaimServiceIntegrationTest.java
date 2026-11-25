@@ -173,6 +173,31 @@ class SchedulerClaimServiceIntegrationTest {
     }
 
     @Test
+    void expiryWorkerDrainsExpiredLeasesWithoutRetryingJobs() {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID firstJob = queuedJob(recipeId);
+        UUID secondJob = queuedJob(recipeId);
+        provider(8L * 1024 * 1024 * 1024);
+        provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment first = claims.claimNext().orElseThrow();
+        LeaseAssignment second = claims.claimNext().orElseThrow();
+        makeLeaseExpired(first.leaseId());
+        makeLeaseExpired(second.leaseId());
+
+        LeaseExpiryWorker worker = new LeaseExpiryWorker(expirations);
+        assertEquals(2, worker.drainOnce());
+        assertEquals(0, worker.drainOnce());
+        assertEquals(2L, count("SELECT COUNT(*) FROM gpu_leases WHERE id IN (?, ?) "
+                + "AND state = 'EXPIRED'", first.leaseId(), second.leaseId()));
+        assertEquals(2L, count("SELECT COUNT(*) FROM jobs WHERE id IN (?, ?) "
+                + "AND state = 'RETRY_WAIT'", firstJob, secondJob));
+        assertEquals(2L, count("SELECT COUNT(*) FROM provider_nodes WHERE id IN (?, ?) "
+                + "AND availability_state = 'OFFLINE'", first.nodeId(), second.nodeId()));
+        assertEquals(2L, count("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id IN (?, ?) "
+                + "AND event_type = 'JOB_LEASE_EXPIRED'", firstJob, secondJob));
+    }
+
+    @Test
     void concurrentExpiryWorkersRecordOneTimeout() throws Exception {
         UUID recipeId = recipe(1024L * 1024 * 1024);
         UUID jobId = queuedJob(recipeId);

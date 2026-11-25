@@ -45,3 +45,9 @@ Do not mark the provider network or Phase 1 as production-ready based on these c
 - The agent now opens a private persistent state directory before its mTLS session, atomically writes and syncs an offered lease before emitting a receipt, and persists receipt confirmation. Startup rejects corrupt or foreign-node state. An unexpired conflicting lease blocks another receipt.
 - Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4 on Windows. Tests cover restart/duplicate receipt, confirmation persistence, conflicting and expired offers, invalid journal state, and no receipt when the journal write fails.
 - Windows tests do not verify Linux directory-sync semantics or service-user permissions. No Linux NVIDIA host qualification or execution test was performed. This journal is not a workload runtime or recovery worker.
+
+## 2026-11-25 opt-in lease-expiry polling increment
+
+- Added a bounded control-plane poller, disabled by default, that invokes up to 64 independent `LeaseExpiryService` transactions per tick. The operator CLI forces the poller off even if its process environment enables it.
+- Control-plane `test` and full `integrationTest` passed with Java 17 against the local healthy PostgreSQL container. The new unit tests cover default-disabled/explicit-enabled registration, empty polls, the batch bound, and database failure propagation. The new live-database test drains two expired leases, verifies both jobs remain `RETRY_WAIT`, both nodes are `OFFLINE`, and exactly one expiry outbox event exists per job. Existing concurrent-expiry tests also passed.
+- The scheduled timer itself was not exercised against a Linux deployment. Polling does not start, stop, renew, or retry a GPU workload; production activation still requires remote cancellation and fencing guarantees.
