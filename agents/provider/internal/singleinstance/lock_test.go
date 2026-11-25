@@ -8,10 +8,14 @@ import (
 )
 
 func TestAcquireExcludesSecondAgentAndReleases(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateLockDir(t)
 	first, err := Acquire(dir)
 	if err != nil {
-		t.Fatalf("first lock: %v", err)
+		info, statErr := os.Lstat(dir)
+		if statErr != nil {
+			t.Fatalf("first lock: %v; inspect state directory: %v", err, statErr)
+		}
+		t.Fatalf("first lock: %v; state directory mode=%v", err, info.Mode())
 	}
 	if _, err := Acquire(dir); err == nil {
 		first.Close()
@@ -51,11 +55,22 @@ func TestAcquireRejectsUnsafePaths(t *testing.T) {
 }
 
 func TestAcquireRejectsExistingDirectoryAsLockFile(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateLockDir(t)
 	if err := os.Mkdir(filepath.Join(dir, lockFileName), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Acquire(dir); err == nil {
 		t.Fatal("accepted directory as lock file")
 	}
+}
+
+func privateLockDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(dir, 0700); err != nil {
+			t.Fatalf("restrict test lock directory: %v", err)
+		}
+	}
+	return dir
 }

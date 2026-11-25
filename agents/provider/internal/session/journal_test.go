@@ -14,7 +14,7 @@ import (
 )
 
 func TestLeaseJournalSurvivesRestartAndDuplicateOffer(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateStateDir(t)
 	journal, err := openLeaseJournal(dir, testNodeID)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestLeaseJournalSurvivesRestartAndDuplicateOffer(t *testing.T) {
 }
 
 func TestLeaseJournalRejectsConflictingLiveOffer(t *testing.T) {
-	journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+	journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestLeaseJournalRejectsConflictingLiveOffer(t *testing.T) {
 }
 
 func TestLeaseJournalCanReplaceExpiredReceipt(t *testing.T) {
-	journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+	journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestLeaseJournalCanReplaceExpiredReceipt(t *testing.T) {
 func TestLeaseJournalFailsClosedOnUnsafeState(t *testing.T) {
 	for _, content := range []string{"not-json", `{"nodeId":"other"}`} {
 		t.Run(content, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := privateStateDir(t)
 			if err := os.WriteFile(filepath.Join(dir, journalFile), []byte(content), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -98,7 +98,7 @@ func TestLeaseJournalFailsClosedOnUnsafeState(t *testing.T) {
 		t.Fatal("accepted relative state directory")
 	}
 	if runtime.GOOS != "windows" {
-		dir := t.TempDir()
+		dir := privateStateDir(t)
 		if err := os.Chmod(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func TestLeaseJournalFailsClosedOnUnsafeState(t *testing.T) {
 }
 
 func TestLeaseJournalWriteFailurePreventsReceipt(t *testing.T) {
-	journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+	journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,4 +126,17 @@ func TestLeaseJournalWriteFailurePreventsReceipt(t *testing.T) {
 	if journal.active != nil {
 		t.Fatal("failed write changed in-memory receipt")
 	}
+}
+
+// testing.T.TempDir makes a 0777 child beneath a private parent; the agent's
+// state directory itself must be private on Linux.
+func privateStateDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(dir, 0700); err != nil {
+			t.Fatalf("restrict test state directory: %v", err)
+		}
+	}
+	return dir
 }

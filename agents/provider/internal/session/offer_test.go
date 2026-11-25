@@ -61,7 +61,7 @@ func TestHeartbeatExchangeReceivesOfferWithoutStartingWork(t *testing.T) {
 		}},
 	}}
 	pending := map[string]string{}
-	journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+	journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestInvalidOffersAreNotAcknowledged(t *testing.T) {
 			exchange := &fakeLeaseExchange{responses: []*agentv1.ConnectResponse{
 				{Body: &agentv1.ConnectResponse_LeaseOffer{LeaseOffer: offer}},
 			}}
-			journal, err := openLeaseJournal(t.TempDir(), testNodeID)
+			journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
