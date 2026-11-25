@@ -19,6 +19,17 @@ Exit criterion: a new developer can understand the system, start dependencies, b
 
 Status: in progress. Durable execution state, an agent hello/heartbeat/transport-offer contract, internal idempotent job creation, internal transactional scheduler claim, opt-in bounded lease-expiry polling, certificate-bound lease receipt, internal fenced start/running/failure transitions, and an unconnected restricted Docker runtime foundation now exist alongside pending-node invites, operator certificate operations, an opt-in mTLS agent session with local receipt journal, a read-only provider console, and a Linux service unit. PostgreSQL migration/schema smoke, claim/expiry/receipt/execution-state tests, and real-certificate offer/receipt mTLS integration tests passed locally (see the [verification record](../development/phase-one-verification.md)). Claim, execution-state transitions, and Docker runtime have no worker/agent caller; the expiry worker is disabled by default, and the transport offer cannot execute a job. Linux NVIDIA host qualification, provider installer/setup flow, authenticated public API, verified hardware, safe queue/availability transitions, activated lease recovery/renewal, artifact staging and verification, runtime crash recovery, and live GPU execution are still pending. Production PKI issuance and operator SSO/RBAC are not yet implemented.
 
+### Remaining Phase 1 subphases (exit gates, not dates)
+
+1. **1A — Host qualification:** a read-only provider preflight, then a witnessed Linux amd64 NVIDIA Container Toolkit and restricted-container smoke on the actual provider host. The preflight alone cannot qualify execution. Jetson/ARM64 is a separate compatibility track.
+2. **1B — Trusted provider:** production certificate issuance and operator authorization, verified hardware evidence, and an explicit, revocable `AVAILABLE` transition. A GPU report must never grant availability by itself.
+3. **1C — Requester intake:** authenticated requester identity, canonical versioned job request/idempotency contract, approved PyTorch recipe, private input staging, and guarded `CREATED -> QUEUED` transition.
+4. **1D — Orchestration:** bounded scheduler worker, fenced executable lease command, agent-side durable acceptance, renewal/expiry/cancellation, and safe stop/quarantine behavior across disconnects.
+5. **1E — Execution and evidence:** verified digest/signature policy, one selected GPU in the restricted runtime, bounded logs, result upload, artifact verification, and fenced terminal completion. Demonstrate crash/restart behavior.
+6. **1F — Usable delivery:** provider installer and first-run enrollment, requester/operator job pages, observability/runbooks, and a reproducible one-provider/one-requester end-to-end acceptance run.
+
+Phase 1 closes only when all six gates have passing evidence. Software work can proceed while 1A awaits a real Linux NVIDIA host; do not label the system executable or public-ready based on mocked Docker or database tests.
+
 - one provider registers verified capabilities;
 - one supported PyTorch recipe is submitted;
 - scheduler creates a durable attempt and time-bounded lease;

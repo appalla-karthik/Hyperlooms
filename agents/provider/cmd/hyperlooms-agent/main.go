@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/config"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/containerruntime"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/health"
+	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/preflight"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/session"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/singleinstance"
 	"github.com/appalla-karthik/Hyperlooms/agents/provider/internal/status"
@@ -32,6 +34,19 @@ func main() {
 func run() int {
 	if len(os.Args) == 2 && os.Args[1] == "version" {
 		fmt.Printf("hyperlooms-agent %s (%s)\n", version, commit)
+		return 0
+	}
+	if len(os.Args) == 2 && os.Args[1] == "preflight" {
+		report := preflight.CheckHost(context.Background())
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(report); err != nil {
+			fmt.Fprintf(os.Stderr, "preflight output error: %v\n", err)
+			return 1
+		}
+		if !report.PrerequisitesObserved {
+			return 1
+		}
 		return 0
 	}
 

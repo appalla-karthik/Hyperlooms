@@ -9,8 +9,11 @@ The console checks local NVIDIA hardware independently of enrollment, then refre
 ```powershell
 go run ./cmd/hyperlooms-agent
 go run ./cmd/hyperlooms-agent version
+go run ./cmd/hyperlooms-agent preflight
 go test ./...
 ```
+
+`preflight` is a read-only host-prerequisite report and needs no enrollment credentials. On the initial supported platform (Linux amd64), it checks NVIDIA GPU discovery and the Docker server platform. It exits `0` only when these limited prerequisites are observed; an unsupported or incomplete host exits `1` and still prints JSON. A passing report **does not** prove the Docker daemon is local, NVIDIA Container Toolkit can inject the GPU, the restricted container can run, or cleanup works. Do not enable runtime recovery or accept public workloads based on this command alone. Run it as the same OS user that will run the service, then complete the witnessed host smoke described in the Phase 1 roadmap. Jetson/ARM64 is not yet supported by this runtime.
 
 Environment variables are documented in the repository `.env.example`.
 

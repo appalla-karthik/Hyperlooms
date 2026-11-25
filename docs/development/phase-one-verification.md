@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-25 host-preflight increment
+
+- Added a read-only `hyperlooms-agent preflight` JSON report for the initial Linux amd64 provider target. It checks platform, strict NVIDIA GPU discovery, and a compatible Docker server response; it does not create or remove containers.
+- Go unit tests cover observed prerequisites, unsupported ARM64 without host probing, independent NVIDIA/Docker errors, and unsupported identities. `go vet ./...`, `go test -race -cover ./...`, and a Linux amd64 agent build passed in the Go 1.27.4 container. The Windows CLI run correctly returned exit code `1` with `host_platform` failed and did not claim GPU qualification.
+- A Docker server response may refer to a remote daemon. Neither locality nor NVIDIA Container Toolkit injection, restricted execution, cleanup, or a real Linux NVIDIA machine has been demonstrated. Phase 1A remains open until a witnessed host smoke passes.
+
 ## 2026-11-24 local Windows/Docker run
 
 - Docker Engine 29.7.2 was available. Only the repository's PostgreSQL 17 container was started; no pre-existing containers were running.
