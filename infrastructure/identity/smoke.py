@@ -104,7 +104,10 @@ def main() -> None:
                     call("GET", path, token=supplied)
                 except HTTPError as error:
                     if error.code != expected:
-                        raise ValueError(f"expected HTTP {expected}, got {error.code}") from error
+                        challenge = error.headers.get("WWW-Authenticate", "")
+                        raise ValueError(
+                            f"expected HTTP {expected}, got {error.code}; "
+                            f"bearer challenge={challenge[:200]!r}") from error
                     error.close()
                 else:
                     raise ValueError(f"expected HTTP {expected}")
