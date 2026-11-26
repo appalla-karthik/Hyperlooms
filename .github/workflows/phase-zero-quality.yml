@@ -156,13 +156,9 @@ jobs:
           HYPERLOOMS_ARTIFACT_BUCKET: hyperlooms-artifacts
           HYPERLOOMS_S3_ACCESS_KEY: hyperlooms-local
           HYPERLOOMS_S3_SECRET_KEY: local-development-only-change-me
-          LOGGING_LEVEL_DEV_HYPERLOOMS_CONTROLPLANE_SHARED_SECURITY: DEBUG
       - run: python infrastructure/identity/smoke.py --api-base http://localhost:8080
         env:
           HYPERLOOMS_IDENTITY_ADMIN_PASSWORD: local-development-only-change-me
-      - name: Safe requester authority diagnostics
-        if: failure()
-        run: grep 'Requester scope mapping:' "$RUNNER_TEMP/identity-api.log" || true
       - name: Stop control plane
         if: always()
         run: |
