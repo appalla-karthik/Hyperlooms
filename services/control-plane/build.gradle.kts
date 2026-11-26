@@ -2,15 +2,15 @@ import com.google.protobuf.gradle.*
 
 plugins {
     java
-    id("org.springframework.boot") version "4.1.2"
+    id("org.springframework.boot") version "4.2.0"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.google.protobuf") version "0.10.0"
+    id("com.google.protobuf") version "0.10.1"
 }
 
 group = "dev.hyperlooms"
 version = "0.1.0-SNAPSHOT"
 
-val grpcVersion = "1.84.1"
+val grpcVersion = "1.85.1"
 
 java {
     toolchain {
@@ -60,7 +60,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.flywaydb:flyway-database-postgresql")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.1")
     implementation("software.amazon.awssdk:s3:2.59.9")
     implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
     implementation("io.grpc:grpc-protobuf:$grpcVersion")
