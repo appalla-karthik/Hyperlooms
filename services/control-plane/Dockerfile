@@ -1,4 +1,4 @@
-FROM gradle:9.2.1-jdk17 AS build
+FROM gradle:9.9.2-jdk17 AS build
 WORKDIR /workspace/services/control-plane
 COPY services/control-plane/ ./
 COPY proto/ /workspace/proto/
