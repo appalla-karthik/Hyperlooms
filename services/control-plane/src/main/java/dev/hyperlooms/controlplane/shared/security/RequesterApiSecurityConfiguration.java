@@ -63,9 +63,11 @@ public class RequesterApiSecurityConfiguration {
         JwtDecoder requesterJwtDecoder(
                 @Value("${hyperlooms.requester-api.issuer-uri:}") String issuer,
                 @Value("${hyperlooms.requester-api.jwk-set-uri:}") String jwkSet,
-                @Value("${hyperlooms.requester-api.audience:}") String audience) {
-            requireHttps(issuer, "issuer URI");
-            requireHttps(jwkSet, "JWK set URI");
+                @Value("${hyperlooms.requester-api.audience:}") String audience,
+                @Value("${hyperlooms.requester-api.allow-insecure-local-issuer:false}")
+                boolean allowInsecureLocalIssuer) {
+            requireTrustedUri(issuer, "issuer URI", allowInsecureLocalIssuer);
+            requireTrustedUri(jwkSet, "JWK set URI", allowInsecureLocalIssuer);
             if (audience == null || audience.isBlank()) {
                 throw new IllegalStateException("Requester API audience is required");
             }
@@ -87,15 +89,23 @@ public class RequesterApiSecurityConfiguration {
                     JwtValidators.createDefaultWithIssuer(issuer), audienceAndSubject);
         }
 
-        private static void requireHttps(String value, String label) {
+        private static void requireTrustedUri(String value, String label,
+                boolean allowInsecureLocalIssuer) {
             try {
                 URI uri = URI.create(Objects.requireNonNull(value));
-                if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
-                        || uri.getUserInfo() != null || uri.getFragment() != null) {
-                    throw new IllegalStateException("Requester API " + label + " must be HTTPS");
+                boolean localHttp = allowInsecureLocalIssuer
+                        && "http".equalsIgnoreCase(uri.getScheme())
+                        && ("localhost".equalsIgnoreCase(uri.getHost())
+                                || "127.0.0.1".equals(uri.getHost()));
+                if (!("https".equalsIgnoreCase(uri.getScheme()) || localHttp)
+                        || uri.getHost() == null || uri.getUserInfo() != null
+                        || uri.getFragment() != null || uri.getQuery() != null) {
+                    throw new IllegalStateException("Requester API " + label
+                            + " must be HTTPS or explicitly allowed loopback HTTP");
                 }
             } catch (IllegalArgumentException | NullPointerException exception) {
-                throw new IllegalStateException("Requester API " + label + " must be HTTPS", exception);
+                throw new IllegalStateException("Requester API " + label
+                        + " must be HTTPS or explicitly allowed loopback HTTP", exception);
             }
         }
     }

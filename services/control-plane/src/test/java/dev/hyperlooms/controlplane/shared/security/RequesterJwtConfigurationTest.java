@@ -19,19 +19,27 @@ class RequesterJwtConfigurationTest {
     @Test
     void refusesMissingOrInsecureTrustConfiguration() {
         assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
-                "", "https://issuer.example/jwks", "hyperlooms-api"));
+                "", "https://issuer.example/jwks", "hyperlooms-api", false));
         assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
-                "http://issuer.example", "https://issuer.example/jwks", "hyperlooms-api"));
+                "http://issuer.example", "https://issuer.example/jwks", "hyperlooms-api", false));
         assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
-                "https://issuer.example", "http://issuer.example/jwks", "hyperlooms-api"));
+                "https://issuer.example", "http://issuer.example/jwks", "hyperlooms-api", false));
         assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
-                "https://issuer.example", "https://issuer.example/jwks", ""));
+                "https://issuer.example", "https://issuer.example/jwks", "", false));
+        assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
+                "http://issuer.example", "http://issuer.example/jwks", "hyperlooms-api", true));
+        assertThrows(IllegalStateException.class, () -> configuration.requesterJwtDecoder(
+                "http://localhost:8180/realms/dev", "http://issuer.example/jwks",
+                "hyperlooms-api", true));
     }
 
     @Test
     void acceptsConfiguredHttpsIssuerJwksAndAudience() {
         assertNotNull(configuration.requesterJwtDecoder(
-                "https://issuer.example", "https://issuer.example/jwks", "hyperlooms-api"));
+                "https://issuer.example", "https://issuer.example/jwks", "hyperlooms-api", false));
+        assertNotNull(configuration.requesterJwtDecoder(
+                "http://localhost:8180/realms/dev", "http://localhost:8180/realms/dev/protocol/openid-connect/certs",
+                "hyperlooms-api", true));
     }
 
     @Test

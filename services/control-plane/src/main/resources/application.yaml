@@ -61,6 +61,7 @@ hyperlooms:
     issuer-uri: ${HYPERLOOMS_REQUESTER_ISSUER_URI:}
     jwk-set-uri: ${HYPERLOOMS_REQUESTER_JWK_SET_URI:}
     audience: ${HYPERLOOMS_REQUESTER_AUDIENCE:}
+    allow-insecure-local-issuer: ${HYPERLOOMS_REQUESTER_ALLOW_INSECURE_LOCAL_ISSUER:false}
     storage:
       bucket: ${HYPERLOOMS_ARTIFACT_BUCKET:}
       region: ${HYPERLOOMS_S3_REGION:us-east-1}

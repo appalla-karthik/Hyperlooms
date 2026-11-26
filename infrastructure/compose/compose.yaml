@@ -23,6 +23,24 @@ services:
     networks:
       - hyperlooms-local
 
+  identity-provider:
+    # Local OIDC development only. Production needs HTTPS, durable DB and hardening.
+    profiles: [identity]
+    image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+    restart: "no"
+    command: start-dev --import-realm --hostname=http://localhost:8180
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${HYPERLOOMS_IDENTITY_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${HYPERLOOMS_IDENTITY_ADMIN_PASSWORD:-local-development-only-change-me}
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - ../identity/hyperlooms-dev-realm.json:/opt/keycloak/data/import/hyperlooms-dev-realm.json:ro
+      - hyperlooms-keycloak-dev:/opt/keycloak/data
+    mem_limit: 1g
+    networks:
+      - hyperlooms-local
+
   object-storage:
     # Official SeaweedFS MinIO-compatible adapter; separate volume from old MinIO data.
     image: ghcr.io/seaweedfs/minio-compat:latest@sha256:7dc586b4e00e8afc495471b06c704f70abe08ff97229e8b9e263c76c05f7051e
@@ -78,6 +96,7 @@ services:
 volumes:
   hyperlooms-postgres:
   hyperlooms-seaweedfs:
+  hyperlooms-keycloak-dev:
 
 networks:
   hyperlooms-local:

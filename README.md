@@ -2,7 +2,7 @@
 
 Community-owned, verifiable GPU compute for AI workloads.
 
-> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema, opt-in OIDC/JWT requester submit/upload/queue/read API, and opt-in certificate-authenticated provider transport exist. The intake path is tested with local PostgreSQL and S3, but no real identity provider is deployed. A real-certificate mTLS offer/receipt test passes, the agent journals a transport receipt before sending it, and bounded scheduler-claim and lease-expiry pollers are available but disabled by default. Internal fenced start/running/failure transactions and an unconnected restricted Docker runtime foundation exist. Production PKI, Linux NVIDIA qualification, artifact-verified success, and live GPU execution are pending. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
+> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema, opt-in OIDC/JWT requester submit/upload/queue/read API, and opt-in certificate-authenticated provider transport exist. The intake path is tested with local PostgreSQL and S3; a loopback-only Keycloak development issuer and a bounded PyTorch recipe candidate are present, but production identity deployment and an approved/published recipe image remain pending. A real-certificate mTLS offer/receipt test passes, the agent journals a transport receipt before sending it, and bounded scheduler-claim and lease-expiry pollers are available but disabled by default. Internal fenced start/running/failure transactions and an unconnected restricted Docker runtime foundation exist. Production PKI, Linux NVIDIA qualification, artifact-verified success, and live GPU execution are pending. The repository does not yet execute remote GPU workloads. Features described as future work are not implemented claims.
 
 HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
 
@@ -67,9 +67,10 @@ The browser-facing API uses REST. OpenAPI is the machine-readable contract for t
 apps/web/                    Next.js operator and user dashboard
 services/control-plane/      Spring Boot control plane
 agents/provider/             Go provider agent
-workloads/python-sdk/        Input manifest and requester intake SDK; approved recipes pending
+workloads/python-sdk/        Input manifest and requester intake SDK
+workloads/recipes/           Bounded PyTorch recipe candidate; image approval pending
 proto/                       Shared versioned gRPC contracts
-infrastructure/              Local compose, monitoring, and certificate assets
+infrastructure/              Local compose, identity, monitoring, and certificate assets
 docs/                        Product, architecture, security, and ADRs
 .github/workflows/           CI quality gates
 ```
