@@ -58,6 +58,21 @@ class RequesterJwtConfigurationTest {
                 "alice", Instant.now().minusSeconds(120))).hasErrors());
     }
 
+    @Test
+    void mapsKeycloakScopeClaimToRequesterAuthorities() {
+        Jwt token = Jwt.withTokenValue("synthetic-test-token").header("alg", "RS256")
+                .claim("sub", "alice")
+                .claim("scope", "openid jobs:read jobs:write")
+                .build();
+        var authentication = RequesterApiSecurityConfiguration.requesterAuthenticationConverter()
+                .convert(token);
+        assertNotNull(authentication);
+        assertTrue(authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("SCOPE_jobs:read")));
+        assertTrue(authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("SCOPE_jobs:write")));
+    }
+
     private static Jwt token(String issuer, String audience, String subject, Instant expiresAt) {
         return Jwt.withTokenValue("synthetic-test-token").header("alg", "RS256")
                 .issuedAt(Instant.now().minusSeconds(300)).expiresAt(expiresAt)
