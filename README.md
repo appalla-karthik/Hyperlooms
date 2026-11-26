@@ -67,7 +67,7 @@ The browser-facing API uses REST. OpenAPI is the machine-readable contract for t
 apps/web/                    Next.js operator and user dashboard
 services/control-plane/      Spring Boot control plane
 agents/provider/             Go provider agent
-workloads/python-sdk/        Future workload SDK and approved recipes
+workloads/python-sdk/        Input manifest and requester intake SDK; approved recipes pending
 proto/                       Shared versioned gRPC contracts
 infrastructure/              Local compose, monitoring, and certificate assets
 docs/                        Product, architecture, security, and ADRs

@@ -133,3 +133,9 @@ Do not mark the provider network or Phase 1 as production-ready based on these c
 - Provider-agent `go test ./...` and `go vet ./...` passed with Go 1.27.4 on Windows. Fake-Docker tests cover command restrictions, nonzero workload exit, invalid specs rejected before Docker, cleanup after start failure, cleanup-error reporting, cancellation cleanup, and bounded CLI output.
 - No real Docker GPU container was run. No image signature verification, artifact staging, logs, crash-orphan recovery, or hostile-image isolation test exists. The agent session does not invoke this package. This is not yet a working remote GPU job.
 - A local `GOOS=linux GOARCH=amd64` cross-build was attempted but could not complete because the temporary Windows Go distribution lacked `pkg/include/textflag.h`; this is a local toolchain limitation, not a passing Linux build result.
+
+## 2026-11-26 requester SDK intake increment
+
+- Added an installable, dependency-free Python requester client for the existing opt-in OIDC-protected API: submit with caller-stable idempotency key, manifest/file staging, queue, owner-scoped status read, and unleased cancellation. The convenience flow re-checks file hashes before upload and does not re-stage a replay that has left `CREATED`.
+- The client requires HTTPS except explicit loopback development, refuses redirects with bearer credentials, caps file and response sizes, and omits token/server error bodies from exceptions. It does not acquire or refresh access tokens.
+- Local `py -m unittest discover -s tests -v` passed: 13 tests, 12 passed and one Windows symlink test skipped. A `py -m pip wheel --no-deps` package build passed. New HTTP tests use a local fake server, not a real identity provider or live GPU host. No remote execution claim follows from these tests.

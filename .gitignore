@@ -26,6 +26,8 @@ coverage.out
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+dist/
 
 # Node / Next.js
 node_modules/
