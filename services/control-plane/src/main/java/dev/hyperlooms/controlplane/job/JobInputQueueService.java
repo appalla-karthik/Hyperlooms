@@ -6,7 +6,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Internal-only queue boundary; caller identity must come from future authentication. */
+/** Queue boundary; callers must provide a verified requester identity. */
 public final class JobInputQueueService {
 
     private final JdbcTemplate jdbc;

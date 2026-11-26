@@ -3,6 +3,8 @@ package dev.hyperlooms.controlplane.shared.configuration;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -11,11 +13,13 @@ public class OpenApiConfiguration {
 
     @Bean
     OpenAPI hyperloomsOpenApi() {
-        return new OpenAPI().info(new Info()
-                .title("HYPER_LOOMS Control Plane API")
+        return new OpenAPI().components(new Components().addSecuritySchemes("requesterBearer",
+                new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer")
+                        .bearerFormat("JWT"))).info(new Info()
+                .title("Hyperlooms Control Plane API")
                 .version("v1")
-                .description("Public HTTP contract for the HYPER_LOOMS control plane. "
-                        + "Phase 0 exposes foundation endpoints only.")
-                .contact(new Contact().name("HYPER_LOOMS")));
+                .description("Foundation endpoints and an opt-in OIDC/JWT requester intake API. "
+                        + "Queueing a job does not start remote GPU execution.")
+                .contact(new Contact().name("Hyperlooms")));
     }
 }

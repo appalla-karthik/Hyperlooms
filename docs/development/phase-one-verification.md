@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-26 opt-in authenticated requester intake increment
+
+- Added a default-disabled OIDC/JWT requester API for idempotent submission, owner-scoped reads, bounded manifest/file uploads, and guarded verified-input queueing. The configured issuer, JWKS endpoint, audience, token expiry, subject, and `jobs:read`/`jobs:write` scopes form the HTTP trust boundary. Tests use synthetic authenticated principals; no real identity provider or browser login has been deployed.
+- `test integrationTest bootJar` passed locally against PostgreSQL and S3-compatible MinIO: 38 unit tests and 46 integration tests, zero failures/errors/skips. Intake integration tests cover authentication/scope denial, owner isolation, idempotent replay/conflict, upload size rejection, create-once staging retry, incomplete-input denial, verified queue transition, and queue replay. Claim validation has direct unit tests for issuer, audience, subject, and expiry; real JWKS signature verification against a deployed issuer remains to be exercised.
+- This does not execute a queued job. Production ingress limits, abuse controls, identity-provider provisioning, approved runnable recipe, bucket policy/orphan cleanup, and Linux NVIDIA execution qualification remain open.
+
 ## 2026-11-26 trusted internal input-staging increment
 
 - Added an internal staging service for a trusted requester subject. It validates job ownership and `CREATED` state, the canonical declared manifest, per-file paths/digests/sizes, and the 8 MiB file/32 MiB total bounds before create-once S3 writes. Identical retries do not overwrite bytes; mismatched existing objects are rejected.

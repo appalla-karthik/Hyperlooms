@@ -12,7 +12,7 @@ import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Internal-only, server-mediated staging. The caller must supply an authenticated subject. */
+/** Server-mediated staging; callers must provide a verified requester identity. */
 public final class InputStagingService {
 
     private final JdbcTemplate jdbc;

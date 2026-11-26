@@ -53,6 +53,19 @@ springdoc:
     tags-sorter: alpha
 
 hyperlooms:
+  requester-api:
+    enabled: ${HYPERLOOMS_REQUESTER_API_ENABLED:false}
+    issuer-uri: ${HYPERLOOMS_REQUESTER_ISSUER_URI:}
+    jwk-set-uri: ${HYPERLOOMS_REQUESTER_JWK_SET_URI:}
+    audience: ${HYPERLOOMS_REQUESTER_AUDIENCE:}
+    storage:
+      bucket: ${HYPERLOOMS_ARTIFACT_BUCKET:}
+      region: ${HYPERLOOMS_S3_REGION:us-east-1}
+      endpoint: ${HYPERLOOMS_S3_ENDPOINT:}
+      path-style: ${HYPERLOOMS_S3_PATH_STYLE:false}
+      allow-insecure-local-endpoint: ${HYPERLOOMS_S3_ALLOW_INSECURE_LOCAL:false}
+      access-key: ${HYPERLOOMS_S3_ACCESS_KEY:}
+      secret-key: ${HYPERLOOMS_S3_SECRET_KEY:}
   lease-expiry:
     enabled: ${HYPERLOOMS_LEASE_EXPIRY_ENABLED:false}
     poll-interval-ms: ${HYPERLOOMS_LEASE_EXPIRY_POLL_INTERVAL_MS:5000}

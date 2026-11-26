@@ -25,7 +25,14 @@ public final class S3InputObjectStore implements InputObjectStore {
 
     @Override
     public InputStream get(String key) {
-        return client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build());
+        try {
+            return client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build());
+        } catch (S3Exception exception) {
+            if (exception.statusCode() == 404) {
+                throw new InputObjectMissingException();
+            }
+            throw exception;
+        }
     }
 
     @Override
