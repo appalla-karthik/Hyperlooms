@@ -46,9 +46,24 @@ if [[ "$ready" != true ]]; then
 fi
 
 grep -Eq '"phase"[[:space:]]*:[[:space:]]*"FOUNDATION"' "$status_file"
-curl -fsS --max-time 10 -o "$health_file" http://localhost:8080/actuator/health
+echo "Checking actuator health after status readiness."
+health_ready=false
+for ((attempt = 1; attempt <= 30; attempt++)); do
+  if curl -fsS --max-time 10 -o "$health_file" http://localhost:8080/actuator/health 2>/dev/null &&
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' "$health_file"; then
+    health_ready=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$health_ready" != true ]]; then
+  echo "Control-plane health did not become UP after status was ready; response and recent startup output:" >&2
+  if [[ -f "$health_file" ]]; then cat "$health_file" >&2; fi
+  tail -n 80 "$log_file" >&2
+  exit 1
+fi
+echo "Checking OpenAPI document."
 curl -fsS --max-time 10 -o "$openapi_file" http://localhost:8080/v3/api-docs
-grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' "$health_file"
 grep -Fq '/api/v1/system/status' "$openapi_file"
 
 db_user="${HYPERLOOMS_POSTGRES_USER:-hyperlooms}"
