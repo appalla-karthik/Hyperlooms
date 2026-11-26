@@ -3,6 +3,8 @@ package dev.hyperlooms.controlplane.shared.security;
 import java.net.URI;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -20,10 +22,14 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration(proxyBeanMethods = false)
 public class RequesterApiSecurityConfiguration {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RequesterApiSecurityConfiguration.class);
 
     @Bean
     SecurityFilterChain httpSecurity(HttpSecurity http,
@@ -57,12 +63,24 @@ public class RequesterApiSecurityConfiguration {
         return http.build();
     }
 
-    static JwtAuthenticationConverter requesterAuthenticationConverter() {
+    static Converter<Jwt, ? extends AbstractAuthenticationToken> requesterAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter scopes = new JwtGrantedAuthoritiesConverter();
         scopes.setAuthoritiesClaimName("scope");
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(scopes);
-        return converter;
+        return jwt -> {
+            AbstractAuthenticationToken authentication = converter.convert(jwt);
+            if (LOG.isDebugEnabled()) {
+                boolean read = authentication.getAuthorities().stream()
+                        .anyMatch(authority -> authority.getAuthority().equals("SCOPE_jobs:read"));
+                boolean write = authentication.getAuthorities().stream()
+                        .anyMatch(authority -> authority.getAuthority().equals("SCOPE_jobs:write"));
+                Object claim = jwt.getClaim("scope");
+                LOG.debug("Requester scope mapping: claimType={}, read={}, write={}",
+                        claim == null ? "missing" : claim.getClass().getSimpleName(), read, write);
+            }
+            return authentication;
+        };
     }
 
     @Configuration(proxyBeanMethods = false)
