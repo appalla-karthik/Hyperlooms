@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -21,6 +24,7 @@ const (
 	maxMemoryBytes    = 1 << 40
 	commandTimeout    = 15 * time.Second
 	maxCommandOutput  = 32 << 10
+	maxArtifactBytes  = 1 << 20
 	managedLabelKey   = "dev.hyperlooms.managed"
 	managedLabelValue = "provider-agent"
 	nodeLabelKey      = "dev.hyperlooms.node"
@@ -45,16 +49,29 @@ type Spec struct {
 	MemoryBytes    int64
 	MaxRuntime     time.Duration
 	LeaseExpiresAt time.Time
+	// InputJSON is a previously verified, bounded snapshot. Nil keeps the legacy
+	// no-artifact runtime path for internal tests; executable recipes require it.
+	InputJSON []byte
 }
 
 type Result struct {
-	ExitCode int
+	ExitCode   int
+	OutputJSON []byte
 }
 
 // Execute is Linux amd64 only until other platform/driver matrices are qualified.
 func Execute(ctx context.Context, spec Spec) (Result, error) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		return Result{}, fmt.Errorf("container execution requires qualified linux/amd64 host")
+	}
+	if err := validate(spec); err != nil {
+		return Result{}, err
+	}
+	if len(spec.InputJSON) == 0 {
+		return Result{}, fmt.Errorf("executable recipe requires a verified input snapshot")
+	}
+	if err := verifyImage(ctx, spec.Image); err != nil {
+		return Result{}, err
 	}
 	nonce := make([]byte, 8)
 	if _, err := rand.Read(nonce); err != nil {
@@ -74,6 +91,21 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	}
 	if !managedContainerName(name, spec.LeaseID) {
 		return Result{}, fmt.Errorf("invalid managed container name")
+	}
+	var workDir string
+	if len(spec.InputJSON) != 0 {
+		workDir, err = os.MkdirTemp("", "hyperlooms-lease-")
+		if err != nil {
+			return Result{}, fmt.Errorf("create private artifact workspace: %w", err)
+		}
+		defer os.RemoveAll(workDir)
+		if strings.ContainsAny(workDir, ",\n\r") {
+			return Result{}, fmt.Errorf("artifact workspace cannot be safely mounted")
+		}
+		inputPath := filepath.Join(workDir, "request.json")
+		if err := os.WriteFile(inputPath, spec.InputJSON, 0644); err != nil {
+			return Result{}, fmt.Errorf("stage bounded input: %w", err)
+		}
 	}
 	deadline := spec.LeaseExpiresAt
 	if maxDeadline := time.Now().Add(spec.MaxRuntime); maxDeadline.Before(deadline) {
@@ -95,8 +127,14 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 		"--memory-swap=" + strconv.FormatInt(spec.MemoryBytes, 10),
 		"--gpus=device=" + spec.GPUUUID, "--user=65532:65532",
 		"--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--log-driver=none",
-		"--init", "--restart=no", spec.Image,
+		"--init", "--restart=no",
 	}
+	if workDir != "" {
+		createArgs = append(createArgs,
+			"--mount=type=bind,src="+filepath.Join(workDir, "request.json")+",dst=/inputs/request.json,readonly",
+			"--tmpfs=/outputs:rw,nosuid,nodev,noexec,size=4m,mode=1777")
+	}
+	createArgs = append(createArgs, spec.Image)
 	createdID, err := cli.run(runCtx, createArgs...)
 	if err != nil {
 		return Result{}, fmt.Errorf("create restricted container: %w", err)
@@ -133,7 +171,22 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	if err != nil || exitCode < 0 || exitCode > 255 {
 		return Result{}, fmt.Errorf("invalid container exit status")
 	}
-	return Result{ExitCode: exitCode}, nil
+	if exitCode != 0 || workDir == "" {
+		return Result{ExitCode: exitCode}, nil
+	}
+	outputPath := filepath.Join(workDir, "result.json")
+	if _, err := cli.run(runCtx, "cp", createdID+":/outputs/result.json", outputPath); err != nil {
+		return Result{}, fmt.Errorf("copy bounded result artifact: %w", err)
+	}
+	info, err := os.Lstat(outputPath)
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > maxArtifactBytes {
+		return Result{}, fmt.Errorf("result artifact is missing, unsafe, or exceeds 1 MiB")
+	}
+	resultBytes, err := os.ReadFile(outputPath)
+	if err != nil || len(resultBytes) == 0 || len(resultBytes) > maxArtifactBytes || !json.Valid(resultBytes) {
+		return Result{}, fmt.Errorf("result artifact is unreadable or invalid JSON")
+	}
+	return Result{ExitCode: exitCode, OutputJSON: resultBytes}, nil
 }
 
 func validate(spec Spec) error {
@@ -149,6 +202,10 @@ func validate(spec Spec) error {
 		spec.MaxRuntime <= 0 || spec.MaxRuntime > 24*time.Hour ||
 		!spec.LeaseExpiresAt.After(time.Now().Add(time.Second)) {
 		return fmt.Errorf("invalid resource limit or expired lease")
+	}
+	if len(spec.InputJSON) > maxArtifactBytes ||
+		(len(spec.InputJSON) != 0 && !json.Valid(spec.InputJSON)) {
+		return fmt.Errorf("input artifact must be bounded JSON")
 	}
 	return nil
 }

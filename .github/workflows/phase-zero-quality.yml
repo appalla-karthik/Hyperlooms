@@ -46,6 +46,34 @@ jobs:
       - run: go test -race -cover ./...
       - run: go build -trimpath ./cmd/hyperlooms-agent
 
+  jetson-agent-build:
+    name: Experimental Jetson ARM64 agent build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/provider
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agents/provider/go.mod
+          cache-dependency-path: agents/provider/go.sum
+      - name: Cross-compile static Linux ARM64 agent
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o dist/hyperlooms-agent-linux-arm64 ./cmd/hyperlooms-agent
+          file dist/hyperlooms-agent-linux-arm64
+          file dist/hyperlooms-agent-linux-arm64 | grep -q 'ARM aarch64'
+          cd dist
+          sha256sum hyperlooms-agent-linux-arm64 > hyperlooms-agent-linux-arm64.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hyperlooms-agent-linux-arm64-experimental
+          path: |
+            agents/provider/dist/hyperlooms-agent-linux-arm64
+            agents/provider/dist/hyperlooms-agent-linux-arm64.sha256
+          retention-days: 7
+
   python-sdk:
     name: Python workload SDK
     runs-on: ubuntu-latest

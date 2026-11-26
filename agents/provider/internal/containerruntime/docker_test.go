@@ -3,6 +3,7 @@ package containerruntime
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -106,6 +107,78 @@ func TestNonzeroExitIsAWorkloadResult(t *testing.T) {
 	}
 }
 
+func TestBoundedInputAndOutputArtifactWiring(t *testing.T) {
+	spec := testSpec()
+	spec.InputJSON = []byte(`{"schemaVersion":1}`)
+	fake := &fakeDocker{responses: map[string]string{"wait": "0"}}
+	fake.handle = func(args []string) (string, error) {
+		switch args[0] {
+		case "create":
+			return testCreatedID, nil
+		case "wait":
+			return "0", nil
+		case "cp":
+			return "", os.WriteFile(args[2], []byte(`{"schemaVersion":1,"device":"cuda"}`), 0600)
+		default:
+			return "", nil
+		}
+	}
+	result, err := executeWith(context.Background(), spec, fake, testContainerName)
+	if err != nil || result.ExitCode != 0 || !strings.Contains(string(result.OutputJSON), `"device":"cuda"`) {
+		t.Fatalf("artifact roundtrip failed: result=%+v err=%v", result, err)
+	}
+	if len(fake.calls) != 5 || fake.calls[3][0] != "cp" || fake.calls[4][0] != "rm" {
+		t.Fatalf("result was not copied before cleanup: %v", fake.calls)
+	}
+	var mounted bool
+	for _, arg := range fake.calls[0] {
+		if strings.HasPrefix(arg, "--mount=type=bind,src=") &&
+			strings.HasSuffix(arg, ",dst=/inputs/request.json,readonly") {
+			mounted = true
+		}
+	}
+	if !mounted || !contains(fake.calls[0], "--tmpfs=/outputs:rw,nosuid,nodev,noexec,size=4m,mode=1777") {
+		t.Fatalf("input/output mounts missing: %v", fake.calls[0])
+	}
+}
+
+func TestMissingResultFailsClosedAndRemovesContainer(t *testing.T) {
+	spec := testSpec()
+	spec.InputJSON = []byte(`{}`)
+	fake := &fakeDocker{responses: map[string]string{"wait": "0"}}
+	if _, err := executeWith(context.Background(), spec, fake, testContainerName); err == nil ||
+		!strings.Contains(err.Error(), "result artifact") {
+		t.Fatalf("missing result accepted: %v", err)
+	}
+	if len(fake.calls) != 5 || fake.calls[4][0] != "rm" {
+		t.Fatalf("missing result skipped cleanup: %v", fake.calls)
+	}
+}
+
+func TestMalformedResultFailsClosedAndRemovesContainer(t *testing.T) {
+	spec := testSpec()
+	spec.InputJSON = []byte(`{}`)
+	fake := &fakeDocker{responses: map[string]string{"wait": "0"}}
+	fake.handle = func(args []string) (string, error) {
+		switch args[0] {
+		case "create":
+			return testCreatedID, nil
+		case "wait":
+			return "0", nil
+		case "cp":
+			return "", os.WriteFile(args[2], []byte(`not-json`), 0600)
+		}
+		return "", nil
+	}
+	if _, err := executeWith(context.Background(), spec, fake, testContainerName); err == nil ||
+		!strings.Contains(err.Error(), "invalid JSON") {
+		t.Fatalf("malformed result accepted: %v", err)
+	}
+	if len(fake.calls) != 5 || fake.calls[4][0] != "rm" {
+		t.Fatalf("malformed result skipped cleanup: %v", fake.calls)
+	}
+}
+
 func TestValidationRejectsUnpinnedOrExpiredWorkWithoutDocker(t *testing.T) {
 	bad := []Spec{
 		func() Spec { s := testSpec(); s.NodeID = "wrong"; return s }(),
@@ -113,6 +186,8 @@ func TestValidationRejectsUnpinnedOrExpiredWorkWithoutDocker(t *testing.T) {
 		func() Spec { s := testSpec(); s.GPUUUID = "GPU-test"; return s }(),
 		func() Spec { s := testSpec(); s.MemoryBytes = 0; return s }(),
 		func() Spec { s := testSpec(); s.LeaseExpiresAt = time.Now().Add(-time.Second); return s }(),
+		func() Spec { s := testSpec(); s.InputJSON = []byte("not-json"); return s }(),
+		func() Spec { s := testSpec(); s.InputJSON = []byte(strings.Repeat("x", maxArtifactBytes+1)); return s }(),
 	}
 	for _, spec := range bad {
 		fake := &fakeDocker{}
