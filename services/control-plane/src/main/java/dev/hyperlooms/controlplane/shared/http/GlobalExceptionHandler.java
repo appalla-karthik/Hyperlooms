@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 
 import dev.hyperlooms.controlplane.job.IdempotencyConflictException;
+import dev.hyperlooms.controlplane.job.JobCancellationConflictException;
 import dev.hyperlooms.controlplane.job.InputObjectMissingException;
 import dev.hyperlooms.controlplane.job.InputStagingDeniedException;
 import dev.hyperlooms.controlplane.job.JobInputQueueDeniedException;
@@ -52,6 +53,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(createError(
                 HttpStatus.CONFLICT, "Idempotency conflict",
                 "This key was already used for a different job request.", request, List.of()));
+    }
+
+    @ExceptionHandler(JobCancellationConflictException.class)
+    public ResponseEntity<ApiError> handleCancellationConflict(
+            JobCancellationConflictException exception, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(createError(
+                HttpStatus.CONFLICT, "Cancellation unavailable",
+                "An active or terminal job cannot be canceled through this API.",
+                request, List.of()));
     }
 
     @ExceptionHandler(RecipeUnavailableException.class)

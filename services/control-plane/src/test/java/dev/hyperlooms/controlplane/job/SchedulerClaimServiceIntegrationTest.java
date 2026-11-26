@@ -96,6 +96,21 @@ class SchedulerClaimServiceIntegrationTest {
     }
 
     @Test
+    void boundedWorkerClaimsOneEligibleJobThenStopsWithoutDoubleBooking() {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID firstJob = queuedJob(recipeId);
+        UUID secondJob = queuedJob(recipeId);
+        UUID nodeId = provider(2L * 1024 * 1024 * 1024);
+
+        assertEquals(1, new SchedulerClaimWorker(claims).drainOnce());
+        assertEquals(1L, count("SELECT COUNT(*) FROM jobs WHERE id IN (?, ?) AND state = 'LEASED'",
+                firstJob, secondJob));
+        assertEquals(1L, count("SELECT COUNT(*) FROM gpu_leases WHERE node_id = ? "
+                + "AND state = 'ISSUED'", nodeId));
+        assertEquals(0, new SchedulerClaimWorker(claims).drainOnce());
+    }
+
+    @Test
     void insufficientMemoryUnverifiedGpuAndStaleHeartbeatCannotBeClaimed() {
         UUID recipeId = recipe(4L * 1024 * 1024 * 1024);
         UUID jobId = queuedJob(recipeId);

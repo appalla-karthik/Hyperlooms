@@ -115,6 +115,23 @@ class JobControllerIntegrationTest {
                         .header("Idempotency-Key", "request-1")
                         .contentType("application/json").content(request(recipeId, "b".repeat(64))))
                 .andExpect(status().isConflict());
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("bob", "jobs:write")))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("alice", "jobs:read")))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("alice", "jobs:write")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("CANCELED"))
+                .andExpect(jsonPath("$.replayed").value(false));
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("alice", "jobs:write")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true));
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_CANCELED'", Long.class, jobId));
     }
 
     @Test
@@ -175,6 +192,20 @@ class JobControllerIntegrationTest {
                         .param("path", "input.txt")
                         .contentType("application/octet-stream").content(file))
                 .andExpect(status().isNotFound());
+        // Simulate the state after a scheduler claim to prove the public API
+        // never treats an issued lease as safely stopped.
+        jdbc.update("UPDATE jobs SET state = 'LEASED' WHERE id = ?", jobId);
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("alice", "jobs:write")))
+                .andExpect(status().isConflict());
+        jdbc.update("UPDATE jobs SET state = 'QUEUED' WHERE id = ?", jobId);
+        mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
+                        .with(requester("alice", "jobs:write")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("CANCELED"));
+        mvc.perform(get("/api/v1/jobs/{jobId}", jobId)
+                        .with(requester("alice", "jobs:read")))
+                .andExpect(jsonPath("$.state").value("CANCELED"));
     }
 
     @Test

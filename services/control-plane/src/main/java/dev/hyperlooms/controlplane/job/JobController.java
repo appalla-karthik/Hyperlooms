@@ -37,13 +37,16 @@ public class JobController {
     private final JobReadService reads;
     private final InputStagingService staging;
     private final JobInputQueueService queue;
+    private final JobCancellationService cancellations;
 
     public JobController(JobSubmissionService submissions, JobReadService reads,
-            InputStagingService staging, JobInputQueueService queue) {
+            InputStagingService staging, JobInputQueueService queue,
+            JobCancellationService cancellations) {
         this.submissions = submissions;
         this.reads = reads;
         this.staging = staging;
         this.queue = queue;
+        this.cancellations = cancellations;
     }
 
     @PostMapping
@@ -98,6 +101,13 @@ public class JobController {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Input files are incomplete or invalid");
         }
+    }
+
+    @PostMapping("/{jobId}/cancel")
+    public JobCancellationResult cancel(@PathVariable UUID jobId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return cancellations.cancelUnleased(jobId, RequesterIdentity.fromVerifiedJwt(jwt))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private static byte[] readBounded(HttpServletRequest request, long maximum) throws IOException {

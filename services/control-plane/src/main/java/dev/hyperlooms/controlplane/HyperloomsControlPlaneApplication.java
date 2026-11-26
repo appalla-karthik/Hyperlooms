@@ -22,6 +22,7 @@ public class HyperloomsControlPlaneApplication {
                     .web(WebApplicationType.NONE)
                     .run("--hyperlooms.agent-grpc.enabled=false",
                             "--hyperlooms.lease-expiry.enabled=false",
+                            "--hyperlooms.scheduler.enabled=false",
                             "--spring.main.banner-mode=off")) {
                 String result = context.getBean(ProviderOperatorCommands.class)
                         .execute(Arrays.copyOfRange(args, 1, args.length), System.in);

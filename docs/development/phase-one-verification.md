@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-26 bounded claim polling and safe requester cancellation
+
+- Added a default-disabled scheduler worker that invokes at most 16 independent transactional claims per poll. It is forcibly disabled for operator CLI runs. Unit tests cover the default-off gate, explicit registration, empty poll, batch bound, and database failure propagation; a live PostgreSQL test confirms one eligible provider is not double-booked by the worker.
+- Added an owner- and scope-gated requester cancellation endpoint for only `CREATED` and `QUEUED` jobs. Cancellation locks the job, writes one `JOB_CANCELED` outbox event, and replays idempotently. HTTP integration tests cover wrong owner/scope, created/queued cancellation, duplicate cancellation, and rejection of an active-state cancellation. Active-lease cancellation remains unavailable until a fenced agent stop protocol exists.
+- `test integrationTest bootJar` passed locally against PostgreSQL and S3-compatible MinIO: 43 unit tests and 47 integration tests, zero failures/errors/skips. This does not qualify a real provider, start a container, terminate active work, or complete Phase 1.
+
 ## 2026-11-26 opt-in authenticated requester intake increment
 
 - Added a default-disabled OIDC/JWT requester API for idempotent submission, owner-scoped reads, bounded manifest/file uploads, and guarded verified-input queueing. The configured issuer, JWKS endpoint, audience, token expiry, subject, and `jobs:read`/`jobs:write` scopes form the HTTP trust boundary. Tests use synthetic authenticated principals; no real identity provider or browser login has been deployed.

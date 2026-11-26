@@ -53,6 +53,9 @@ springdoc:
     tags-sorter: alpha
 
 hyperlooms:
+  scheduler:
+    enabled: ${HYPERLOOMS_SCHEDULER_ENABLED:false}
+    poll-interval-ms: ${HYPERLOOMS_SCHEDULER_POLL_INTERVAL_MS:5000}
   requester-api:
     enabled: ${HYPERLOOMS_REQUESTER_API_ENABLED:false}
     issuer-uri: ${HYPERLOOMS_REQUESTER_ISSUER_URI:}

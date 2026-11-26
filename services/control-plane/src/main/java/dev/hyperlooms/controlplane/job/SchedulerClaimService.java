@@ -11,9 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Claims at most one eligible queued job. There is deliberately no timer or
- * agent command yet: claim and expiry reconciliation must be wired to a
- * qualified delivery/fencing protocol before this can execute workloads.
+ * Claims at most one eligible queued job. An experimental timer is opt-in;
+ * a claim is not an executable agent command or proof of GPU work.
  */
 @Service
 public class SchedulerClaimService {
