@@ -2,6 +2,12 @@
 
 This is an evidence ledger, not a completion certificate. Phase 1 remains in progress.
 
+## 2026-11-26 trusted internal input-staging increment
+
+- Added an internal staging service for a trusted requester subject. It validates job ownership and `CREATED` state, the canonical declared manifest, per-file paths/digests/sizes, and the 8 MiB file/32 MiB total bounds before create-once S3 writes. Identical retries do not overwrite bytes; mismatched existing objects are rejected.
+- Control-plane `test integrationTest bootJar` passed locally against PostgreSQL and the S3-compatible bucket. After setting the local OpenSSL path and adding the S3 conflict assertion, a clean integration rerun reported 43 tests, zero failures, zero skips; the unit run reported 33 tests, zero failures/skips. Integration tests cover submit, server-mediated manifest/file staging, snapshot verification, the `QUEUED` transition, and unauthorized, corrupt, conflicting, and canceled-job staging. This is not a browser/API upload flow and does not qualify real GPU execution.
+- Public requester authentication, HTTP request limits, production bucket policy, orphan cleanup, and an approved runnable PyTorch recipe remain open.
+
 ## 2026-11-25 internal verified-input queue increment
 
 - V8 adds verified-input metadata and database constraints: version-1 jobs cannot enter `QUEUED` or active execution states without a complete matching snapshot record. Existing version-0 internal fixtures are preserved.

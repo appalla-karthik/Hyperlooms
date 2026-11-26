@@ -1,6 +1,8 @@
 package dev.hyperlooms.controlplane.job;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
@@ -24,7 +26,7 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 class S3InputSnapshotIntegrationTest {
 
     @Test
-    void verifiesStagedObjectsAndReadsBackServerSnapshotFromPrivateS3() {
+    void verifiesStagedObjectsAndReadsBackServerSnapshotFromPrivateS3() throws Exception {
         String bucket = System.getenv().getOrDefault("HYPERLOOMS_ARTIFACT_BUCKET",
                 "hyperlooms-artifacts");
         String endpoint = System.getenv().getOrDefault("HYPERLOOMS_S3_ENDPOINT",
@@ -48,6 +50,11 @@ class S3InputSnapshotIntegrationTest {
             try {
                 store.put(jobPrefix + "staging/manifest.json", manifest);
                 store.put(jobPrefix + "staging/files/input.txt", content);
+                assertFalse(store.putIfAbsent(jobPrefix + "staging/files/input.txt",
+                        "different".getBytes(StandardCharsets.US_ASCII)));
+                try (var staged = store.get(jobPrefix + "staging/files/input.txt")) {
+                    assertArrayEquals(content, staged.readAllBytes());
+                }
 
                 VerifiedInputSnapshot snapshot = new InputSnapshotStager(store)
                         .stage(jobId, sha256(manifest));

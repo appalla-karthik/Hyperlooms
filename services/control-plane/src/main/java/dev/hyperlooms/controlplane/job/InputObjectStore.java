@@ -8,4 +8,7 @@ public interface InputObjectStore {
     InputStream get(String key);
 
     void put(String key, byte[] content);
+
+    /** Atomically create a staging object; false means the key already exists. */
+    boolean putIfAbsent(String key, byte[] content);
 }

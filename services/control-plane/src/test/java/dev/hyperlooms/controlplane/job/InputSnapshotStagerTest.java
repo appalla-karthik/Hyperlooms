@@ -119,5 +119,10 @@ class InputSnapshotStagerTest {
         public void put(String key, byte[] content) {
             objects.put(key, corruptVerifiedWrites ? new byte[] {0} : content.clone());
         }
+
+        @Override
+        public boolean putIfAbsent(String key, byte[] content) {
+            return objects.putIfAbsent(key, content.clone()) == null;
+        }
     }
 }

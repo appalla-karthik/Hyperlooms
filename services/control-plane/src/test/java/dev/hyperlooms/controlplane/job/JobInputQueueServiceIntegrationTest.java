@@ -162,6 +162,54 @@ class JobInputQueueServiceIntegrationTest {
     }
 
     @Test
+    void trustedStagingFeedsVerifiedQueueAndRejectsUnauthorizedOrChangedBytes() {
+        UUID recipeId = recipe();
+        String owner = "requester:" + UUID.randomUUID();
+        UUID jobId = submit(recipeId, owner);
+        MemoryStore store = new MemoryStore();
+        InputStagingService staging = new InputStagingService(jdbc, store);
+
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageManifest(jobId, "another-requester", manifest()));
+        assertTrue(store.objects.isEmpty());
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageManifest(jobId, owner, "{}".getBytes(StandardCharsets.US_ASCII)));
+        assertTrue(staging.stageManifest(jobId, owner, manifest()));
+        assertFalse(staging.stageManifest(jobId, owner, manifest()));
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageFile(jobId, owner, "unexpected.txt", CONTENT));
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageFile(jobId, owner, "input.txt", "wrong".getBytes(StandardCharsets.US_ASCII)));
+        assertTrue(staging.stageFile(jobId, owner, "input.txt", CONTENT));
+        assertFalse(staging.stageFile(jobId, owner, "input.txt", CONTENT));
+
+        assertEquals(JobState.QUEUED, service(store).queueVerifiedInput(jobId, owner).state());
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageFile(jobId, owner, "input.txt", CONTENT));
+    }
+
+    @Test
+    void writeOnceStagingCannotReplacePreexistingCorruptObjectOrContinueAfterCancellation() {
+        UUID recipeId = recipe();
+        String owner = "requester:" + UUID.randomUUID();
+        UUID jobId = submit(recipeId, owner);
+        MemoryStore store = new MemoryStore();
+        InputStagingService staging = new InputStagingService(jdbc, store);
+        store.objects.put("jobs/" + jobId + "/staging/manifest.json",
+                "preexisting".getBytes(StandardCharsets.US_ASCII));
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageManifest(jobId, owner, manifest()));
+        assertEquals("preexisting", new String(store.objects.get(
+                "jobs/" + jobId + "/staging/manifest.json"), StandardCharsets.US_ASCII));
+
+        store.objects.put("jobs/" + jobId + "/staging/manifest.json", manifest());
+        jdbc.update("UPDATE jobs SET state = 'CANCELED' WHERE id = ?", jobId);
+        assertThrows(InputStagingDeniedException.class,
+                () -> staging.stageFile(jobId, owner, "input.txt", CONTENT));
+        assertFalse(store.objects.containsKey("jobs/" + jobId + "/staging/files/input.txt"));
+    }
+
+    @Test
     void realS3SnapshotBindsToPostgresJobBeforeQueueing() {
         UUID recipeId = recipe();
         String owner = "requester:" + UUID.randomUUID();
@@ -182,8 +230,11 @@ class JobInputQueueServiceIntegrationTest {
                         AwsBasicCredentials.create(accessKey, secretKey))).build()) {
             S3InputObjectStore store = new S3InputObjectStore(client, bucket);
             try {
-                store.put(prefix + "staging/manifest.json", manifest());
-                store.put(prefix + "staging/files/input.txt", CONTENT);
+                InputStagingService staging = new InputStagingService(jdbc, store);
+                assertTrue(staging.stageManifest(jobId, owner, manifest()));
+                assertFalse(staging.stageManifest(jobId, owner, manifest()));
+                assertTrue(staging.stageFile(jobId, owner, "input.txt", CONTENT));
+                assertFalse(staging.stageFile(jobId, owner, "input.txt", CONTENT));
 
                 JobInputQueueResult queued = new JobInputQueueService(jdbc, transactions,
                         new InputSnapshotStager(store)).queueVerifiedInput(jobId, owner);
@@ -274,6 +325,11 @@ class JobInputQueueServiceIntegrationTest {
         @Override
         public void put(String key, byte[] content) {
             objects.put(key, content.clone());
+        }
+
+        @Override
+        public boolean putIfAbsent(String key, byte[] content) {
+            return objects.putIfAbsent(key, content.clone()) == null;
         }
     }
 }
