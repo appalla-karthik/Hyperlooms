@@ -113,12 +113,13 @@ def main() -> None:
     output_path = Path(args.output)
     encoded = json.dumps(result, allow_nan=False, sort_keys=True,
                          separators=(",", ":")).encode("utf-8") + b"\n"
-    temporary = output_path.with_name(output_path.name + ".tmp")
-    with temporary.open("xb") as stream:
+    # The provider bind-mounts this one pre-created output file. A rename over a
+    # bind mount fails, so write directly; the host reads only after exit 0 and
+    # validates the complete JSON and size.
+    with output_path.open("wb") as stream:
         stream.write(encoded)
         stream.flush()
         os.fsync(stream.fileno())
-    os.replace(temporary, output_path)
 
 
 if __name__ == "__main__":

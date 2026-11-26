@@ -116,9 +116,7 @@ func TestBoundedInputAndOutputArtifactWiring(t *testing.T) {
 		case "create":
 			return testCreatedID, nil
 		case "wait":
-			return "0", nil
-		case "cp":
-			return "", os.WriteFile(args[2], []byte(`{"schemaVersion":1,"device":"cuda"}`), 0600)
+			return "0", os.WriteFile(outputMountSource(fake.calls[0]), []byte(`{"schemaVersion":1,"device":"cuda"}`), 0600)
 		default:
 			return "", nil
 		}
@@ -127,19 +125,31 @@ func TestBoundedInputAndOutputArtifactWiring(t *testing.T) {
 	if err != nil || result.ExitCode != 0 || !strings.Contains(string(result.OutputJSON), `"device":"cuda"`) {
 		t.Fatalf("artifact roundtrip failed: result=%+v err=%v", result, err)
 	}
-	if len(fake.calls) != 5 || fake.calls[3][0] != "cp" || fake.calls[4][0] != "rm" {
-		t.Fatalf("result was not copied before cleanup: %v", fake.calls)
+	if len(fake.calls) != 4 || fake.calls[3][0] != "rm" {
+		t.Fatalf("result was not read before cleanup: %v", fake.calls)
 	}
-	var mounted bool
+	var inputMounted bool
 	for _, arg := range fake.calls[0] {
 		if strings.HasPrefix(arg, "--mount=type=bind,src=") &&
 			strings.HasSuffix(arg, ",dst=/inputs/request.json,readonly") {
-			mounted = true
+			inputMounted = true
 		}
 	}
-	if !mounted || !contains(fake.calls[0], "--tmpfs=/outputs:rw,nosuid,nodev,noexec,size=4m,mode=1777") {
+	if !inputMounted || outputMountSource(fake.calls[0]) == "" ||
+		!contains(fake.calls[0], "--ulimit=fsize=4194304:4194304") {
 		t.Fatalf("input/output mounts missing: %v", fake.calls[0])
 	}
+}
+
+func outputMountSource(args []string) string {
+	const prefix = "--mount=type=bind,src="
+	const suffix = ",dst=/outputs/result.json"
+	for _, arg := range args {
+		if strings.HasPrefix(arg, prefix) && strings.HasSuffix(arg, suffix) {
+			return strings.TrimSuffix(strings.TrimPrefix(arg, prefix), suffix)
+		}
+	}
+	return ""
 }
 
 func TestMissingResultFailsClosedAndRemovesContainer(t *testing.T) {
@@ -150,7 +160,7 @@ func TestMissingResultFailsClosedAndRemovesContainer(t *testing.T) {
 		!strings.Contains(err.Error(), "result artifact") {
 		t.Fatalf("missing result accepted: %v", err)
 	}
-	if len(fake.calls) != 5 || fake.calls[4][0] != "rm" {
+	if len(fake.calls) != 4 || fake.calls[3][0] != "rm" {
 		t.Fatalf("missing result skipped cleanup: %v", fake.calls)
 	}
 }
@@ -164,9 +174,7 @@ func TestMalformedResultFailsClosedAndRemovesContainer(t *testing.T) {
 		case "create":
 			return testCreatedID, nil
 		case "wait":
-			return "0", nil
-		case "cp":
-			return "", os.WriteFile(args[2], []byte(`not-json`), 0600)
+			return "0", os.WriteFile(outputMountSource(fake.calls[0]), []byte(`not-json`), 0600)
 		}
 		return "", nil
 	}
@@ -174,7 +182,7 @@ func TestMalformedResultFailsClosedAndRemovesContainer(t *testing.T) {
 		!strings.Contains(err.Error(), "invalid JSON") {
 		t.Fatalf("malformed result accepted: %v", err)
 	}
-	if len(fake.calls) != 5 || fake.calls[4][0] != "rm" {
+	if len(fake.calls) != 4 || fake.calls[3][0] != "rm" {
 		t.Fatalf("malformed result skipped cleanup: %v", fake.calls)
 	}
 }

@@ -93,6 +93,7 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 		return Result{}, fmt.Errorf("invalid managed container name")
 	}
 	var workDir string
+	var outputPath string
 	if len(spec.InputJSON) != 0 {
 		workDir, err = os.MkdirTemp("", "hyperlooms-lease-")
 		if err != nil {
@@ -105,6 +106,19 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 		inputPath := filepath.Join(workDir, "request.json")
 		if err := os.WriteFile(inputPath, spec.InputJSON, 0644); err != nil {
 			return Result{}, fmt.Errorf("stage bounded input: %w", err)
+		}
+		outputPath = filepath.Join(workDir, "result.json")
+		outputFile, createErr := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if createErr != nil {
+			return Result{}, fmt.Errorf("create single result file: %w", createErr)
+		}
+		if closeErr := outputFile.Close(); closeErr != nil {
+			return Result{}, fmt.Errorf("close single result file: %w", closeErr)
+		}
+		// The private parent is 0700; the container's non-root UID can write
+		// only this mounted file, not another host path or directory.
+		if err := os.Chmod(outputPath, 0666); err != nil {
+			return Result{}, fmt.Errorf("permit container result write: %w", err)
 		}
 	}
 	deadline := spec.LeaseExpiresAt
@@ -132,7 +146,8 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	if workDir != "" {
 		createArgs = append(createArgs,
 			"--mount=type=bind,src="+filepath.Join(workDir, "request.json")+",dst=/inputs/request.json,readonly",
-			"--tmpfs=/outputs:rw,nosuid,nodev,noexec,size=4m,mode=1777")
+			"--mount=type=bind,src="+outputPath+",dst=/outputs/result.json",
+			"--ulimit=fsize=4194304:4194304")
 	}
 	createArgs = append(createArgs, spec.Image)
 	createdID, err := cli.run(runCtx, createArgs...)
@@ -173,10 +188,6 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	}
 	if exitCode != 0 || workDir == "" {
 		return Result{ExitCode: exitCode}, nil
-	}
-	outputPath := filepath.Join(workDir, "result.json")
-	if _, err := cli.run(runCtx, "cp", createdID+":/outputs/result.json", outputPath); err != nil {
-		return Result{}, fmt.Errorf("copy bounded result artifact: %w", err)
 	}
 	info, err := os.Lstat(outputPath)
 	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > maxArtifactBytes {

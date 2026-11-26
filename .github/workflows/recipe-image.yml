@@ -79,6 +79,8 @@ jobs:
           set -euo pipefail
           docker pull "$IMAGE@$DIGEST"
           result_dir="$(mktemp -d)"
+          : > "$result_dir/result.json"
+          chmod 666 "$result_dir/result.json"
           container_id=''
           cleanup() {
             if [ -n "$container_id" ]; then docker rm -f "$container_id" >/dev/null 2>&1 || true; fi
@@ -90,15 +92,15 @@ jobs:
             --pull=never --network=none --read-only --cap-drop=ALL \
             --security-opt=no-new-privileges=true --pids-limit=256 \
             --memory=4g --memory-swap=4g --user=65532:65532 \
+            --ulimit=fsize=4194304:4194304 \
             --tmpfs=/tmp:rw,nosuid,nodev,size=64m \
-            --tmpfs=/outputs:rw,nosuid,nodev,noexec,size=4m,mode=1777 \
             --mount="type=bind,src=$PWD/workloads/recipes/linear-regression-v1/example-request.json,dst=/inputs/request.json,readonly" \
+            --mount="type=bind,src=$result_dir/result.json,dst=/outputs/result.json" \
             "$IMAGE@$DIGEST" --device cpu)"
           docker start "$container_id" >/dev/null
           status="$(docker wait "$container_id")"
           docker logs "$container_id"
           test "$status" = '0'
-          docker cp "$container_id:/outputs/result.json" "$result_dir/result.json"
           python -c 'import json, math, sys; x=json.load(open(sys.argv[1], encoding="utf-8")); assert x["schemaVersion"] == 1 and x["device"] == "cpu" and math.isfinite(x["meanSquaredError"])' "$result_dir/result.json"
           echo "Restricted CPU image smoke passed: $IMAGE@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
           echo 'CPU smoke is not CUDA/NVIDIA host qualification.' >> "$GITHUB_STEP_SUMMARY"
