@@ -37,6 +37,21 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Flyway V8 verified input binding schema was not applied';
     END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '9' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V9 prepared execution command schema was not applied';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '10' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V10 prepared command GPU binding was not applied';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM flyway_schema_history WHERE version = '11' AND success = true
+    ) THEN
+        RAISE EXCEPTION 'Flyway V11 command staging receipt schema was not applied';
+    END IF;
 END;
 $$;
 
@@ -239,6 +254,47 @@ $$;
 INSERT INTO outbox_events (id, event_key, aggregate_type, aggregate_id, event_type, payload)
 VALUES ('00000000-0000-4000-8000-000000000601', 'phase-one-test-event', 'job',
         '00000000-0000-4000-8000-000000000301', 'job.leased', '{"attempt":1}'::jsonb);
+
+INSERT INTO lease_execution_commands
+    (id, lease_id, node_id, gpu_uuid, fencing_token, image_repository, image_digest,
+     max_runtime_seconds, verified_input_prefix, input_manifest_sha256,
+     input_file_count, input_total_bytes)
+SELECT '00000000-0000-4000-8000-000000000701', l.id, l.node_id, l.gpu_uuid, l.fencing_token,
+       'registry.example.invalid/hyperlooms/test', 'sha256:' || repeat('a', 64),
+       60, 'jobs/phase-one-test/verified/snapshot', repeat('b', 64), 1, 32
+FROM gpu_leases l WHERE l.id = '00000000-0000-4000-8000-000000000502';
+
+INSERT INTO lease_execution_command_staging
+    (command_id, lease_id, node_id, fencing_token)
+SELECT c.id, c.lease_id, c.node_id, c.fencing_token
+FROM lease_execution_commands c
+WHERE c.id = '00000000-0000-4000-8000-000000000701';
+
+DO $$
+BEGIN
+    BEGIN
+        UPDATE lease_execution_commands SET input_total_bytes = 33
+        WHERE id = '00000000-0000-4000-8000-000000000701';
+        RAISE EXCEPTION 'prepared command mutation was accepted';
+    EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM = 'prepared command mutation was accepted' THEN RAISE; END IF;
+    END;
+    BEGIN
+        INSERT INTO lease_execution_commands
+            (id, lease_id, node_id, gpu_uuid, fencing_token, image_repository, image_digest,
+             max_runtime_seconds, verified_input_prefix, input_manifest_sha256,
+             input_file_count, input_total_bytes)
+        SELECT '00000000-0000-4000-8000-000000000702', l.id, l.node_id,
+               l.gpu_uuid, l.fencing_token, 'registry.example.invalid/hyperlooms/test',
+               'sha256:' || repeat('a', 64), 60,
+               'jobs/phase-one-test/verified/snapshot', repeat('b', 64), 1, 32
+        FROM gpu_leases l WHERE l.id = '00000000-0000-4000-8000-000000000502';
+        RAISE EXCEPTION 'duplicate command for one lease was accepted';
+    EXCEPTION WHEN unique_violation THEN
+        NULL;
+    END;
+END;
+$$;
 
 DO $$
 BEGIN

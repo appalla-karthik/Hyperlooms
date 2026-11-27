@@ -22,10 +22,15 @@ import org.junit.jupiter.api.Test;
 
 import dev.hyperlooms.controlplane.job.LeaseAcknowledgementService;
 import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.LeaseExecutionCommand;
+import dev.hyperlooms.controlplane.job.LeaseExecutionCommandService;
+import dev.hyperlooms.controlplane.job.LeaseExecutionDelivery;
+import dev.hyperlooms.controlplane.job.LeaseExecutionPlan;
 import dev.hyperlooms.controlplane.job.LeaseOfferService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
 import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
+import dev.hyperlooms.protocol.agent.v1.AgentCommandStaged;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
 import dev.hyperlooms.protocol.agent.v1.GpuCapability;
@@ -41,6 +46,7 @@ class AgentSessionGrpcServiceTest {
     private ProviderCapabilityService capabilities;
     private LeaseOfferService offers;
     private LeaseAcknowledgementService acknowledgements;
+    private LeaseExecutionCommandService commands;
     private AgentSessionGrpcService service;
     private Responses responses;
 
@@ -51,8 +57,11 @@ class AgentSessionGrpcServiceTest {
         capabilities = mock(ProviderCapabilityService.class);
         offers = mock(LeaseOfferService.class);
         acknowledgements = mock(LeaseAcknowledgementService.class);
+        commands = mock(LeaseExecutionCommandService.class);
         when(offers.nextIssuedForPeer(peer)).thenReturn(Optional.empty());
-        service = new AgentSessionGrpcService(capabilities, offers, acknowledgements);
+        when(commands.nextForPeer(peer)).thenReturn(Optional.empty());
+        service = new AgentSessionGrpcService(capabilities, offers, acknowledgements,
+                commands, true);
         responses = new Responses();
     }
 
@@ -158,6 +167,53 @@ class AgentSessionGrpcServiceTest {
         verify(acknowledgements, never()).acknowledge(any(), any(), anyLong());
     }
 
+    @Test
+    void optedInHeartbeatDeliversPinnedCommandAndRecordsStagingReceipt() {
+        UUID jobId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID leaseId = UUID.randomUUID();
+        UUID commandId = UUID.randomUUID();
+        Instant expires = Instant.now().plusSeconds(90);
+        String digest = "sha256:" + "a".repeat(64);
+        LeaseExecutionPlan plan = new LeaseExecutionPlan(jobId, attemptId, leaseId, nodeId,
+                "GPU-test", 42, expires, "ghcr.io/example/recipe", digest, 60,
+                "jobs/" + jobId + "/verified/snapshot", "b".repeat(64), 1, 32);
+        LeaseExecutionCommand command = new LeaseExecutionCommand(commandId, leaseId, nodeId,
+                "GPU-test", 42, plan.imageRepository(), digest, 60,
+                plan.verifiedInputPrefix(), plan.inputManifestSha256(), 1, 32, Instant.now());
+        when(commands.nextForPeer(peer)).thenReturn(Optional.of(new LeaseExecutionDelivery(plan, command)));
+        StreamObserver<ConnectRequest> requests = connect();
+        requests.onNext(hello(nodeId, 1));
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("heartbeat-1")
+                .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                        .setSequence(1)).build());
+        assertEquals(commandId.toString(), responses.messages.get(1)
+                .getExecutionCommand().getCommandId());
+        assertEquals("GPU-test", responses.messages.get(1).getExecutionCommand().getGpuUuid());
+        assertTrue(responses.messages.get(2).hasHeartbeatAcknowledgement());
+
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("stage-1")
+                .setCommandStaged(AgentCommandStaged.newBuilder().setNodeId(nodeId.toString())
+                        .setLeaseId(leaseId.toString()).setCommandId(commandId.toString())
+                        .setFencingToken(42)).build());
+        verify(commands).acknowledgeStaged(peer, leaseId, commandId, 42);
+        assertEquals("stage-1", responses.messages.get(3)
+                .getCommandStagedAcknowledgement().getRequestMessageId());
+    }
+
+    @Test
+    void commandStagingIsDefaultOffWhenServerGateIsDisabled() {
+        service = new AgentSessionGrpcService(capabilities, offers, acknowledgements,
+                commands, false);
+        StreamObserver<ConnectRequest> requests = connect();
+        requests.onNext(hello(nodeId, 1));
+        requests.onNext(ConnectRequest.newBuilder().setMessageId("heartbeat-1")
+                .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                        .setSequence(1)).build());
+        verify(commands, never()).nextForPeer(any());
+        assertTrue(responses.messages.get(1).hasHeartbeatAcknowledgement());
+    }
+
     private StreamObserver<ConnectRequest> connect() {
         Context context = Context.current().withValue(AgentPeerInterceptor.PEER, peer);
         Context previous = context.attach();
@@ -172,6 +228,7 @@ class AgentSessionGrpcServiceTest {
         return ConnectRequest.newBuilder().setMessageId("hello-1")
                 .setHello(AgentHello.newBuilder().setNodeId(claimedNode.toString())
                         .setProtocolVersion(version).setAgentVersion("test-agent")
+                        .setSupportsCommandStaging(true)
                         .addGpus(GpuCapability.newBuilder().setGpuUuid("GPU-test")
                                 .setModel("Test GPU").setVramBytes(1024)
                                 .setDriverVersion("test").setCudaVersion("test")))

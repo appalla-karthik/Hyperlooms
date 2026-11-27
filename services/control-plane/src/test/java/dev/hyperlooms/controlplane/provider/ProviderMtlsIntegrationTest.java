@@ -30,6 +30,7 @@ import dev.hyperlooms.controlplane.job.LeaseAssignment;
 import dev.hyperlooms.controlplane.job.SchedulerClaimService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
+import dev.hyperlooms.protocol.agent.v1.AgentCommandStaged;
 import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
 import dev.hyperlooms.protocol.agent.v1.AgentSessionServiceGrpc;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
@@ -47,7 +48,7 @@ import io.grpc.stub.StreamObserver;
 
 /** Real TLS + PostgreSQL boundary; GPU discovery is deliberately not simulated here. */
 @Tag("integration")
-@SpringBootTest
+@SpringBootTest(properties = "hyperlooms.agent.command-staging-enabled=true")
 class ProviderMtlsIntegrationTest {
 
     @TempDir
@@ -85,6 +86,13 @@ class ProviderMtlsIntegrationTest {
     void removeTestRecords() {
         for (UUID jobId : jobIds) {
             jdbc.update("DELETE FROM outbox_events WHERE aggregate_id = ?", jobId);
+            jdbc.update("DELETE FROM lease_execution_command_staging WHERE lease_id IN "
+                    + "(SELECT c.lease_id FROM lease_execution_commands c "
+                    + "JOIN gpu_leases l ON l.id = c.lease_id "
+                    + "JOIN job_attempts a ON a.id = l.attempt_id WHERE a.job_id = ?)", jobId);
+            jdbc.update("DELETE FROM lease_execution_commands WHERE lease_id IN "
+                    + "(SELECT l.id FROM gpu_leases l "
+                    + "JOIN job_attempts a ON a.id = l.attempt_id WHERE a.job_id = ?)", jobId);
             jdbc.update("DELETE FROM gpu_leases WHERE attempt_id IN "
                     + "(SELECT id FROM job_attempts WHERE job_id = ?)", jobId);
             jdbc.update("DELETE FROM job_attempts WHERE job_id = ?", jobId);
@@ -106,6 +114,100 @@ class ProviderMtlsIntegrationTest {
             for (UUID nodeId : nodeIds) {
                 jdbc.update("DELETE FROM provider_nodes WHERE id = ?", nodeId);
             }
+        }
+    }
+
+    @Test
+    void preparedCommandStagesAcrossRealMtlsAndRecordsReceipt() throws Exception {
+        UUID nodeId = pendingNode();
+        TestCa ca = new TestCa(temporary);
+        SignedCertificate serverCertificate = ca.issue("server", "DNS:localhost", "serverAuth", 51);
+        SignedCertificate clientCertificate = ca.issue("client", providerSan(nodeId), "clientAuth", 52);
+        identities.bindExpectedCertificate(nodeId,
+                new OperatorCertificateVerifier(ca.certificate().toString())
+                        .verifyClientCertificate(clientCertificate.certificate()));
+
+        try (TestServer server = new TestServer(serverCertificate, ca.certificate(), sessions);
+                TestSession client = server.connect(clientCertificate, ca.certificate())) {
+            client.send(hello(nodeId, true));
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getHelloAcknowledgement().getAccepted());
+            jdbc.update("UPDATE provider_gpus SET verification_state = 'VERIFIED', "
+                    + "verified_at = CURRENT_TIMESTAMP WHERE node_id = ? AND gpu_uuid = 'GPU-test'", nodeId);
+            jdbc.update("UPDATE provider_nodes SET availability_state = 'AVAILABLE', "
+                    + "last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", nodeId);
+
+            UUID recipeId = UUID.randomUUID();
+            recipeIds.add(recipeId);
+            String digest = "a".repeat(64);
+            jdbc.update("""
+                    INSERT INTO workload_recipes
+                        (id, name, image_repository, image_digest, max_runtime_seconds,
+                         min_vram_bytes, state, approved_at)
+                    VALUES (?, ?, 'registry.example.invalid/hyperlooms/test', ?, 60,
+                        1073741824, 'APPROVED', CURRENT_TIMESTAMP)
+                    """, recipeId, "mtls-stage-test-" + recipeId, "sha256:" + digest);
+            UUID jobId = UUID.randomUUID();
+            jobIds.add(jobId);
+            jdbc.update("""
+                    INSERT INTO jobs
+                        (id, requester_subject, recipe_id, state, idempotency_key,
+                         request_sha256, request_version, input_manifest_sha256,
+                         verified_input_manifest_sha256, input_artifact_prefix,
+                         input_verified_at, input_file_count, input_total_bytes)
+                    VALUES (?, ?, ?, 'QUEUED', ?, ?, 1, ?, ?, ?, CURRENT_TIMESTAMP, 1, 32)
+                    """, jobId, "mtls-stage-test:" + jobId, recipeId, jobId.toString(), digest,
+                    digest, digest, "jobs/" + jobId + "/verified/snapshot");
+            LeaseAssignment assignment = claims.claimNext().orElseThrow();
+            assertEquals(jobId, assignment.jobId());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("heartbeat-stage-offer")
+                    .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                            .setSequence(1)).build());
+            assertEquals(assignment.leaseId().toString(),
+                    assertInstanceOf(ConnectResponse.class, client.receive())
+                            .getLeaseOffer().getLeaseId());
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .hasHeartbeatAcknowledgement());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("receipt-stage-offer")
+                    .setLeaseReceipt(AgentLeaseReceipt.newBuilder().setNodeId(nodeId.toString())
+                            .setLeaseId(assignment.leaseId().toString())
+                            .setFencingToken(assignment.fencingToken())).build());
+            assertEquals("receipt-stage-offer", assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getLeaseReceiptAcknowledgement().getRequestMessageId());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("heartbeat-stage-command")
+                    .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                            .setSequence(2)).build());
+            var command = assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getExecutionCommand();
+            assertEquals(assignment.leaseId().toString(), command.getLeaseId());
+            assertEquals(assignment.fencingToken(), command.getFencingToken());
+            assertEquals("GPU-test", command.getGpuUuid());
+            assertEquals("sha256:" + digest, command.getImageDigest());
+            assertEquals("jobs/" + jobId + "/verified/snapshot", command.getVerifiedInputPrefix());
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .hasHeartbeatAcknowledgement());
+
+            client.send(ConnectRequest.newBuilder().setMessageId("stage-receipt")
+                    .setCommandStaged(AgentCommandStaged.newBuilder().setNodeId(nodeId.toString())
+                            .setLeaseId(assignment.leaseId().toString())
+                            .setCommandId(command.getCommandId())
+                            .setFencingToken(assignment.fencingToken())).build());
+            assertEquals("stage-receipt", assertInstanceOf(ConnectResponse.class, client.receive())
+                    .getCommandStagedAcknowledgement().getRequestMessageId());
+            assertEquals(1L, jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM lease_execution_command_staging
+                    WHERE command_id = ? AND node_id = ? AND fencing_token = ?
+                    """, Long.class, UUID.fromString(command.getCommandId()), nodeId,
+                    assignment.fencingToken()));
+
+            client.send(ConnectRequest.newBuilder().setMessageId("heartbeat-after-stage")
+                    .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
+                            .setSequence(3)).build());
+            assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
+                    .hasHeartbeatAcknowledgement());
         }
     }
 
@@ -268,9 +370,14 @@ class ProviderMtlsIntegrationTest {
     }
 
     private static ConnectRequest hello(UUID nodeId) {
+        return hello(nodeId, false);
+    }
+
+    private static ConnectRequest hello(UUID nodeId, boolean supportsStaging) {
         return ConnectRequest.newBuilder().setMessageId("hello-1")
                 .setHello(AgentHello.newBuilder().setNodeId(nodeId.toString())
                         .setProtocolVersion(1).setAgentVersion("mtls-integration")
+                        .setSupportsCommandStaging(supportsStaging)
                         .addGpus(GpuCapability.newBuilder().setGpuUuid("GPU-test")
                                 .setModel("Test GPU").setVramBytes(8589934592L)
                                 .setDriverVersion("test-driver").setCudaVersion("test-cuda")))

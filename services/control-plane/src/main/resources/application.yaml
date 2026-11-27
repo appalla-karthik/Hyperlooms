@@ -79,3 +79,5 @@ hyperlooms:
     certificate: ${HYPERLOOMS_AGENT_GRPC_CERTIFICATE:}
     private-key: ${HYPERLOOMS_AGENT_GRPC_PRIVATE_KEY:}
     client-ca: ${HYPERLOOMS_AGENT_GRPC_CLIENT_CA:}
+  agent:
+    command-staging-enabled: ${HYPERLOOMS_AGENT_COMMAND_STAGING_ENABLED:false}

@@ -79,4 +79,10 @@ public class RequesterInputStorageConfiguration {
             TransactionTemplate transactions, InputObjectStore store) {
         return new JobInputQueueService(jdbc, transactions, new InputSnapshotStager(store));
     }
+
+    @Bean
+    ScopedInputReadService scopedInputReader(JdbcTemplate jdbc,
+            LeaseExecutionPlanService plans, InputObjectStore store) {
+        return new ScopedInputReadService(jdbc, plans, store);
+    }
 }

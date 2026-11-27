@@ -1,6 +1,17 @@
 package session
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
+
+func TestJetsonDiscoveryCannotInventDiscreteGPUIdentity(t *testing.T) {
+	gpus, err := discoverGPUsOnPlatform(context.Background(), "linux", "arm64")
+	if len(gpus) != 0 || err == nil || !strings.Contains(err.Error(), "shared system memory is not VRAM") {
+		t.Fatalf("unsupported Jetson report was accepted: gpus=%v err=%v", gpus, err)
+	}
+}
 
 func TestParseGPUs(t *testing.T) {
 	gpus, err := parseGPUs("GPU-123, NVIDIA RTX A4000, 16376, 550.54\n", "12.4")

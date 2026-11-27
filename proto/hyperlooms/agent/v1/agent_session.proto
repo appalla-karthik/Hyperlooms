@@ -20,6 +20,7 @@ message ConnectRequest {
     AgentHello hello = 10;
     AgentHeartbeat heartbeat = 11;
     AgentLeaseReceipt lease_receipt = 12;
+    AgentCommandStaged command_staged = 13;
   }
 }
 
@@ -30,6 +31,8 @@ message ConnectResponse {
     HeartbeatAcknowledgement heartbeat_acknowledgement = 11;
     LeaseOffer lease_offer = 12;
     LeaseReceiptAcknowledgement lease_receipt_acknowledgement = 13;
+    ExecutionCommand execution_command = 14;
+    CommandStagedAcknowledgement command_staged_acknowledgement = 15;
   }
 }
 
@@ -39,6 +42,8 @@ message AgentHello {
   string agent_version = 3;
   repeated GpuCapability gpus = 4;
   google.protobuf.Timestamp reported_at = 5;
+  // Opts in only to durable command staging, not container execution.
+  bool supports_command_staging = 6;
 }
 
 // A report is not verification. The control plane validates claims before eligibility.
@@ -106,5 +111,37 @@ message AgentLeaseReceipt {
 message LeaseReceiptAcknowledgement {
   string request_message_id = 1;
   string lease_id = 2;
+  google.protobuf.Timestamp server_time = 3;
+}
+
+// A fenced, immutable snapshot for local staging only. No artifact grant is included.
+message ExecutionCommand {
+  string command_id = 1;
+  string job_id = 2;
+  string attempt_id = 3;
+  string lease_id = 4;
+  string node_id = 5;
+  string gpu_uuid = 6;
+  uint64 fencing_token = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  string image_repository = 9;
+  string image_digest = 10;
+  uint32 max_runtime_seconds = 11;
+  string verified_input_prefix = 12;
+  string input_manifest_sha256 = 13;
+  uint32 input_file_count = 14;
+  uint64 input_total_bytes = 15;
+}
+
+message AgentCommandStaged {
+  string node_id = 1;
+  string lease_id = 2;
+  string command_id = 3;
+  uint64 fencing_token = 4;
+}
+
+message CommandStagedAcknowledgement {
+  string request_message_id = 1;
+  string command_id = 2;
   google.protobuf.Timestamp server_time = 3;
 }

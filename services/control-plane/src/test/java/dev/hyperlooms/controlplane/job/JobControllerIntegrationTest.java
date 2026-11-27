@@ -65,26 +65,27 @@ class JobControllerIntegrationTest {
 
     @AfterEach
     void cleanup() {
-        for (UUID jobId : jobs) {
-            s3.listObjectsV2Paginator(ListObjectsV2Request.builder()
-                    .bucket("hyperlooms-artifacts").prefix("jobs/" + jobId + "/").build())
-                    .contents().forEach(object -> s3.deleteObject(DeleteObjectRequest.builder()
-                            .bucket("hyperlooms-artifacts").key(object.key()).build()));
-        }
         for (UUID recipeId : recipes) {
             jdbc.update("DELETE FROM outbox_events WHERE aggregate_id IN "
                     + "(SELECT id FROM jobs WHERE recipe_id = ?)", recipeId);
             jdbc.update("DELETE FROM jobs WHERE recipe_id = ?", recipeId);
             jdbc.update("DELETE FROM workload_recipes WHERE id = ?", recipeId);
         }
+        for (UUID jobId : jobs) {
+            s3.listObjectsV2Paginator(ListObjectsV2Request.builder()
+                    .bucket("hyperlooms-artifacts").prefix("jobs/" + jobId + "/").build())
+                    .contents().forEach(object -> s3.deleteObject(DeleteObjectRequest.builder()
+                            .bucket("hyperlooms-artifacts").key(object.key()).build()));
+        }
     }
 
     @Test
     void bearerScopeAndOwnerBindSubmissionReplayAndRead() throws Exception {
         UUID recipeId = recipe();
+        String requestKey = "request-" + UUID.randomUUID();
         String body = request(recipeId, DIGEST);
         String firstBody = mvc.perform(post("/api/v1/jobs").with(requester("alice", "jobs:write"))
-                        .header("Idempotency-Key", "request-1")
+                        .header("Idempotency-Key", requestKey)
                         .contentType("application/json").content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.state").value("CREATED"))
@@ -97,7 +98,7 @@ class JobControllerIntegrationTest {
                 "SELECT LEFT(requester_subject, 5) FROM jobs WHERE id = ?", String.class, jobId));
 
         mvc.perform(post("/api/v1/jobs").with(requester("alice", "jobs:write"))
-                        .header("Idempotency-Key", "request-1")
+                        .header("Idempotency-Key", requestKey)
                         .contentType("application/json").content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.jobId").value(jobId.toString()))
@@ -112,7 +113,7 @@ class JobControllerIntegrationTest {
                         .with(requester("bob", "jobs:read")))
                 .andExpect(status().isNotFound());
         mvc.perform(post("/api/v1/jobs").with(requester("alice", "jobs:write"))
-                        .header("Idempotency-Key", "request-1")
+                        .header("Idempotency-Key", requestKey)
                         .contentType("application/json").content(request(recipeId, "b".repeat(64))))
                 .andExpect(status().isConflict());
         mvc.perform(post("/api/v1/jobs/{jobId}/cancel", jobId)
@@ -137,12 +138,13 @@ class JobControllerIntegrationTest {
     @Test
     void boundedAuthenticatedUploadQueuesOnlyVerifiedOwnerInput() throws Exception {
         UUID recipeId = recipe();
+        String requestKey = "upload-" + UUID.randomUUID();
         byte[] file = "api-upload-input".getBytes(StandardCharsets.US_ASCII);
         byte[] manifest = ("{\"files\":[{\"path\":\"input.txt\",\"sha256\":\""
                 + sha256(file) + "\",\"sizeBytes\":" + file.length
                 + "}],\"schemaVersion\":1}").getBytes(StandardCharsets.US_ASCII);
         String body = mvc.perform(post("/api/v1/jobs").with(requester("alice", "jobs:write"))
-                        .header("Idempotency-Key", "upload-1")
+                        .header("Idempotency-Key", requestKey)
                         .contentType("application/json")
                         .content(request(recipeId, sha256(manifest))))
                 .andExpect(status().isCreated())

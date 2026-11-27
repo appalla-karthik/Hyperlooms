@@ -54,6 +54,8 @@ jobs:
         working-directory: agents/provider
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Jetson diagnostic shell scripts
+        run: bash -n ../../scripts/jetson-host-survey.sh ../../scripts/jetson-container-smoke.sh ../../scripts/jetson-restricted-cuda-smoke.sh
       - uses: actions/setup-go@v5
         with:
           go-version-file: agents/provider/go.mod

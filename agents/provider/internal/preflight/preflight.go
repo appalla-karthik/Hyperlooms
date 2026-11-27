@@ -33,6 +33,8 @@ type GPU struct {
 type Report struct {
 	HostOS                string  `json:"hostOs"`
 	HostArch              string  `json:"hostArch"`
+	HostModel             string  `json:"hostModel,omitempty"`
+	L4TRelease            string  `json:"l4tRelease,omitempty"`
 	DockerServer          string  `json:"dockerServer,omitempty"`
 	GPUs                  []GPU   `json:"gpus"`
 	Checks                []Check `json:"checks"`
@@ -42,6 +44,9 @@ type Report struct {
 
 // CheckHost never creates or removes a Docker container or changes host state.
 func CheckHost(ctx context.Context) Report {
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
+		return checkJetson(ctx)
+	}
 	return checkWith(ctx, runtime.GOOS, runtime.GOARCH, session.DiscoverGPUs, dockerServer)
 }
 
@@ -106,9 +111,13 @@ func checkWith(ctx context.Context, hostOS, hostArch string,
 }
 
 func dockerServer(ctx context.Context) (string, error) {
+	return dockerInfo(ctx, "{{.OSType}}/{{.Architecture}}")
+}
+
+func dockerInfo(ctx context.Context, format string) (string, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(probeCtx, "docker", "info", "--format={{.OSType}}/{{.Architecture}}").Output()
+	output, err := exec.CommandContext(probeCtx, "docker", "info", "--format="+format).Output()
 	if err != nil {
 		return "", fmt.Errorf("Docker daemon unavailable to this user: %w", err)
 	}

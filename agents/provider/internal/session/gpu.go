@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,13 @@ var cudaVersion = regexp.MustCompile(`CUDA Version:\s*([0-9.]+)`)
 
 // DiscoverGPUs reads local NVIDIA driver output. These are unverified claims.
 func DiscoverGPUs(ctx context.Context) ([]*agentv1.GpuCapability, error) {
+	return discoverGPUsOnPlatform(ctx, runtime.GOOS, runtime.GOARCH)
+}
+
+func discoverGPUsOnPlatform(ctx context.Context, hostOS, hostArch string) ([]*agentv1.GpuCapability, error) {
+	if hostOS == "linux" && hostArch == "arm64" {
+		return nil, fmt.Errorf("ARM64/Jetson GPU reporting is not yet supported: shared system memory is not VRAM and no discrete GPU UUID is available; use preflight for local diagnostics")
+	}
 	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	info, err := exec.CommandContext(probeCtx, "nvidia-smi").Output()

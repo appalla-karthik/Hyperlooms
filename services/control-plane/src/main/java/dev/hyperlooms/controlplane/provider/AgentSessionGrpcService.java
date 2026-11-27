@@ -5,18 +5,25 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.google.protobuf.Timestamp;
 import dev.hyperlooms.controlplane.job.LeaseAcknowledgementDeniedException;
 import dev.hyperlooms.controlplane.job.LeaseAcknowledgementService;
 import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.LeaseExecutionCommandService;
+import dev.hyperlooms.controlplane.job.LeaseExecutionDelivery;
+import dev.hyperlooms.controlplane.job.LeaseExecutionDeniedException;
 import dev.hyperlooms.controlplane.job.LeaseOfferService;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
 import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
+import dev.hyperlooms.protocol.agent.v1.AgentCommandStaged;
 import dev.hyperlooms.protocol.agent.v1.AgentSessionServiceGrpc;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
+import dev.hyperlooms.protocol.agent.v1.CommandStagedAcknowledgement;
+import dev.hyperlooms.protocol.agent.v1.ExecutionCommand;
 import dev.hyperlooms.protocol.agent.v1.GpuCapability;
 import dev.hyperlooms.protocol.agent.v1.HeartbeatAcknowledgement;
 import dev.hyperlooms.protocol.agent.v1.HelloAcknowledgement;
@@ -34,12 +41,18 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
     private final ProviderCapabilityService capabilities;
     private final LeaseOfferService offers;
     private final LeaseAcknowledgementService acknowledgements;
+    private final LeaseExecutionCommandService commands;
+    private final boolean commandStagingEnabled;
 
     public AgentSessionGrpcService(ProviderCapabilityService capabilities,
-            LeaseOfferService offers, LeaseAcknowledgementService acknowledgements) {
+            LeaseOfferService offers, LeaseAcknowledgementService acknowledgements,
+            LeaseExecutionCommandService commands,
+            @Value("${hyperlooms.agent.command-staging-enabled:false}") boolean commandStagingEnabled) {
         this.capabilities = capabilities;
         this.offers = offers;
         this.acknowledgements = acknowledgements;
+        this.commands = commands;
+        this.commandStagingEnabled = commandStagingEnabled;
     }
 
     @Override
@@ -62,6 +75,7 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
         private boolean accepted;
         private boolean closed;
         private long lastSequence;
+        private boolean supportsCommandStaging;
 
         private Session(ProviderPeerIdentity peer, StreamObserver<ConnectResponse> responses) {
             this.peer = peer;
@@ -84,6 +98,8 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                     heartbeat(request);
                 } else if (accepted && request.hasLeaseReceipt()) {
                     receipt(request);
+                } else if (accepted && request.hasCommandStaged()) {
+                    staged(request);
                 } else {
                     fail(Status.FAILED_PRECONDITION.withDescription(
                             "exactly one hello is required before agent messages"));
@@ -92,6 +108,8 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                 fail(Status.PERMISSION_DENIED.withDescription("provider identity denied"));
             } catch (LeaseAcknowledgementDeniedException exception) {
                 fail(Status.PERMISSION_DENIED.withDescription("lease receipt denied"));
+            } catch (LeaseExecutionDeniedException exception) {
+                fail(Status.PERMISSION_DENIED.withDescription("command staging denied"));
             } catch (IllegalArgumentException exception) {
                 fail(Status.INVALID_ARGUMENT.withDescription("invalid agent message"));
             } catch (RuntimeException exception) {
@@ -119,6 +137,7 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                     claimedNode, hello.getProtocolVersion(), hello.getAgentVersion(), gpus);
             capabilities.acceptHelloFromAuthenticatedPeer(peer, report);
             accepted = true;
+            supportsCommandStaging = hello.getSupportsCommandStaging();
             responses.onNext(ConnectResponse.newBuilder()
                     .setMessageId(UUID.randomUUID().toString())
                     .setHelloAcknowledgement(HelloAcknowledgement.newBuilder()
@@ -149,6 +168,13 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                             .setMessageId(UUID.randomUUID().toString())
                             .setLeaseOffer(toOffer(assignment))
                             .build()));
+            if (commandStagingEnabled && supportsCommandStaging) {
+                commands.nextForPeer(peer).ifPresent(delivery -> responses.onNext(
+                        ConnectResponse.newBuilder()
+                                .setMessageId(UUID.randomUUID().toString())
+                                .setExecutionCommand(toCommand(delivery))
+                                .build()));
+            }
             responses.onNext(ConnectResponse.newBuilder()
                     .setMessageId(UUID.randomUUID().toString())
                     .setHeartbeatAcknowledgement(HeartbeatAcknowledgement.newBuilder()
@@ -171,6 +197,26 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                     .setLeaseReceiptAcknowledgement(LeaseReceiptAcknowledgement.newBuilder()
                             .setRequestMessageId(request.getMessageId())
                             .setLeaseId(leaseId.toString())
+                            .setServerTime(now()))
+                    .build());
+        }
+
+        private void staged(ConnectRequest request) {
+            AgentCommandStaged staged = request.getCommandStaged();
+            if (!commandStagingEnabled || !supportsCommandStaging
+                    || !peer.nodeId().toString().equals(staged.getNodeId())
+                    || staged.getFencingToken() <= 0) {
+                fail(Status.PERMISSION_DENIED.withDescription("command staging denied"));
+                return;
+            }
+            UUID leaseId = UUID.fromString(staged.getLeaseId());
+            UUID commandId = UUID.fromString(staged.getCommandId());
+            commands.acknowledgeStaged(peer, leaseId, commandId, staged.getFencingToken());
+            responses.onNext(ConnectResponse.newBuilder()
+                    .setMessageId(UUID.randomUUID().toString())
+                    .setCommandStagedAcknowledgement(CommandStagedAcknowledgement.newBuilder()
+                            .setRequestMessageId(request.getMessageId())
+                            .setCommandId(commandId.toString())
                             .setServerTime(now()))
                     .build());
         }
@@ -225,6 +271,28 @@ public final class AgentSessionGrpcService extends AgentSessionServiceGrpc.Agent
                 .setGpuUuid(assignment.gpuUuid())
                 .setFencingToken(assignment.fencingToken())
                 .setExpiresAt(timestamp(assignment.expiresAt()))
+                .build();
+    }
+
+    private static ExecutionCommand toCommand(LeaseExecutionDelivery delivery) {
+        var plan = delivery.plan();
+        var command = delivery.command();
+        return ExecutionCommand.newBuilder()
+                .setCommandId(command.id().toString())
+                .setJobId(plan.jobId().toString())
+                .setAttemptId(plan.attemptId().toString())
+                .setLeaseId(command.leaseId().toString())
+                .setNodeId(command.nodeId().toString())
+                .setGpuUuid(command.gpuUuid())
+                .setFencingToken(command.fencingToken())
+                .setExpiresAt(timestamp(plan.expiresAt()))
+                .setImageRepository(command.imageRepository())
+                .setImageDigest(command.imageDigest())
+                .setMaxRuntimeSeconds(command.maxRuntimeSeconds())
+                .setVerifiedInputPrefix(command.verifiedInputPrefix())
+                .setInputManifestSha256(command.inputManifestSha256())
+                .setInputFileCount(command.inputFileCount())
+                .setInputTotalBytes(command.inputTotalBytes())
                 .build();
     }
 }

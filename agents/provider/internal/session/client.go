@@ -85,7 +85,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 		MessageId: requestID,
 		Body: &agentv1.ConnectRequest_Hello{Hello: &agentv1.AgentHello{
 			NodeId: cfg.NodeID, ProtocolVersion: 1, AgentVersion: version,
-			Gpus: gpus, ReportedAt: timestamppb.Now(),
+			Gpus: gpus, ReportedAt: timestamppb.Now(), SupportsCommandStaging: true,
 		}},
 	}); err != nil {
 		return fmt.Errorf("send agent hello: %w", err)
@@ -110,6 +110,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	defer ticker.Stop()
 	var sequence uint64
 	pendingReceipts := make(map[string]string)
+	pendingCommands := make(map[string]string)
 	for {
 		select {
 		case <-ctx.Done():
@@ -130,7 +131,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
 			err := receiveHeartbeatAcknowledgement(stream, requestID, cfg.NodeID,
-				gpus, pendingReceipts, journal, logger)
+				gpus, pendingReceipts, pendingCommands, journal, logger)
 			ackTimeout.Stop()
 			if err != nil {
 				return fmt.Errorf("heartbeat exchange: %w", err)

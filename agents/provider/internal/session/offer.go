@@ -18,7 +18,7 @@ type leaseExchange interface {
 }
 
 func receiveHeartbeatAcknowledgement(stream leaseExchange, requestID, nodeID string,
-	gpus []*agentv1.GpuCapability, pending map[string]string, journal *leaseJournal,
+	gpus []*agentv1.GpuCapability, pendingReceipts, pendingCommands map[string]string, journal *leaseJournal,
 	logger *slog.Logger) error {
 	for messageCount := 0; messageCount < 8; messageCount++ {
 		response, err := stream.Recv()
@@ -27,19 +27,46 @@ func receiveHeartbeatAcknowledgement(stream leaseExchange, requestID, nodeID str
 		}
 		switch {
 		case response.GetLeaseOffer() != nil:
-			if err := receiveOffer(stream, response.GetLeaseOffer(), nodeID, gpus, pending, journal, logger); err != nil {
+			if err := receiveOffer(stream, response.GetLeaseOffer(), nodeID, gpus, pendingReceipts, journal, logger); err != nil {
 				return err
 			}
 		case response.GetLeaseReceiptAcknowledgement() != nil:
 			ack := response.GetLeaseReceiptAcknowledgement()
-			leaseID, ok := pending[ack.GetRequestMessageId()]
+			leaseID, ok := pendingReceipts[ack.GetRequestMessageId()]
 			if !ok || leaseID != ack.GetLeaseId() {
 				return fmt.Errorf("unexpected lease receipt acknowledgement")
 			}
 			if err := journal.confirm(leaseID); err != nil {
 				return err
 			}
-			delete(pending, ack.GetRequestMessageId())
+			delete(pendingReceipts, ack.GetRequestMessageId())
+		case response.GetExecutionCommand() != nil:
+			command := response.GetExecutionCommand()
+			if len(pendingCommands) >= 4 || journal.stageCommand(command) != nil {
+				return fmt.Errorf("execution command rejected by durable staging")
+			}
+			stageID := "stage-" + command.GetCommandId()
+			if err := stream.Send(&agentv1.ConnectRequest{
+				MessageId: stageID,
+				Body: &agentv1.ConnectRequest_CommandStaged{CommandStaged: &agentv1.AgentCommandStaged{
+					NodeId: nodeID, LeaseId: command.GetLeaseId(), CommandId: command.GetCommandId(),
+					FencingToken: command.GetFencingToken(),
+				}},
+			}); err != nil {
+				return fmt.Errorf("send command staging receipt: %w", err)
+			}
+			pendingCommands[stageID] = command.GetCommandId()
+			logger.Info("execution command durably staged; runtime not started", "command_id", command.GetCommandId())
+		case response.GetCommandStagedAcknowledgement() != nil:
+			ack := response.GetCommandStagedAcknowledgement()
+			commandID, ok := pendingCommands[ack.GetRequestMessageId()]
+			if !ok || commandID != ack.GetCommandId() {
+				return fmt.Errorf("unexpected command staging acknowledgement")
+			}
+			if err := journal.confirmCommand(commandID); err != nil {
+				return err
+			}
+			delete(pendingCommands, ack.GetRequestMessageId())
 		case response.GetHeartbeatAcknowledgement() != nil:
 			if response.GetHeartbeatAcknowledgement().GetRequestMessageId() != requestID {
 				return fmt.Errorf("invalid heartbeat acknowledgement")

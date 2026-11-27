@@ -10,4 +10,4 @@ compose=(docker compose -f "$repo_root/infrastructure/compose/compose.yaml")
   -d "${HYPERLOOMS_POSTGRES_DB:-hyperlooms}" \
   <"$repo_root/scripts/verify-phase-one-schema.sql"
 
-echo "Phase 1 schema smoke passed: V2-V7 migrations, certificate rotation, GPU review audit, versioned job requests, idempotency, exclusive GPU lease, fencing, and outbox."
+echo "Phase 1 schema smoke passed: V2-V11 migrations, certificate rotation, GPU review audit, verified inputs, immutable prepared commands and staging receipts, idempotency, exclusive GPU lease, fencing, and outbox."

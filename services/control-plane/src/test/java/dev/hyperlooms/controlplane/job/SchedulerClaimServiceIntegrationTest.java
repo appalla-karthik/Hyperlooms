@@ -6,12 +6,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -24,6 +31,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import dev.hyperlooms.controlplane.provider.ProviderPeerIdentity;
@@ -53,12 +61,24 @@ class SchedulerClaimServiceIntegrationTest {
     private LeaseExecutionStateService execution;
 
     @Autowired
+    private LeaseExecutionPlanService executionPlans;
+
+    @Autowired
+    private LeaseExecutionCommandService executionCommands;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @AfterEach
     void removeTestRecords() {
         for (UUID jobId : jobs) {
             jdbc.update("DELETE FROM outbox_events WHERE aggregate_id = ?", jobId);
+            jdbc.update("DELETE FROM lease_execution_command_staging WHERE lease_id IN "
+                    + "(SELECT l.id FROM gpu_leases l JOIN job_attempts a "
+                    + "ON a.id = l.attempt_id WHERE a.job_id = ?)", jobId);
+            jdbc.update("DELETE FROM lease_execution_commands WHERE lease_id IN "
+                    + "(SELECT l.id FROM gpu_leases l JOIN job_attempts a "
+                    + "ON a.id = l.attempt_id WHERE a.job_id = ?)", jobId);
             jdbc.update("DELETE FROM gpu_leases WHERE attempt_id IN "
                     + "(SELECT id FROM job_attempts WHERE job_id = ?)", jobId);
             jdbc.update("DELETE FROM job_attempts WHERE job_id = ?", jobId);
@@ -355,6 +375,254 @@ class SchedulerClaimServiceIntegrationTest {
     }
 
     @Test
+    void onlyAcknowledgedVerifiedV1JobYieldsAnExecutionPlan() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        LeaseExecutionPlan plan = executionPlans.loadCurrentForPeer(
+                identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertEquals(jobId, plan.jobId());
+        assertEquals(assignment.attemptId(), plan.attemptId());
+        assertEquals(assignment.leaseId(), plan.leaseId());
+        assertEquals(assignment.nodeId(), plan.nodeId());
+        assertEquals(assignment.gpuUuid(), plan.gpuUuid());
+        assertEquals(assignment.fencingToken(), plan.fencingToken());
+        assertEquals(assignment.expiresAt(), plan.expiresAt());
+        assertEquals("registry.example.invalid/hyperlooms/test", plan.imageRepository());
+        assertEquals("sha256:" + DIGEST, plan.imageDigest());
+        assertEquals(60, plan.maxRuntimeSeconds());
+        assertEquals("jobs/" + jobId + "/verified/snapshot", plan.verifiedInputPrefix());
+        assertEquals(DIGEST, plan.inputManifestSha256());
+        assertEquals(1, plan.inputFileCount());
+        assertEquals(32L, plan.inputTotalBytes());
+    }
+
+    @Test
+    void acknowledgedLeasePreparesOneDurableCommandAndOutboxEvent() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.prepareForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        LeaseExecutionCommand command = executionCommands.prepareForPeer(
+                identity, assignment.leaseId(), assignment.fencingToken());
+        LeaseExecutionCommand retry = executionCommands.prepareForPeer(
+                identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertEquals(command.id(), retry.id());
+        assertEquals(assignment.leaseId(), command.leaseId());
+        assertEquals(nodeId, command.nodeId());
+        assertEquals(assignment.gpuUuid(), command.gpuUuid());
+        assertEquals(assignment.fencingToken(), command.fencingToken());
+        assertEquals("sha256:" + DIGEST, command.imageDigest());
+        assertEquals("jobs/" + jobId + "/verified/snapshot", command.verifiedInputPrefix());
+        assertEquals(1L, count("SELECT COUNT(*) FROM lease_execution_commands WHERE lease_id = ?",
+                assignment.leaseId()));
+        assertEquals(1L, count("SELECT COUNT(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'JOB_EXECUTION_COMMAND_PREPARED'", jobId));
+        LeaseExecutionDelivery delivery = executionCommands.nextForPeer(identity).orElseThrow();
+        assertEquals(command.id(), delivery.command().id());
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.acknowledgeStaged(identity, assignment.leaseId(),
+                        command.id(), assignment.fencingToken() + 1));
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.acknowledgeStaged(identity, assignment.leaseId(),
+                        UUID.randomUUID(), assignment.fencingToken()));
+        executionCommands.acknowledgeStaged(identity, assignment.leaseId(),
+                command.id(), assignment.fencingToken());
+        executionCommands.acknowledgeStaged(identity, assignment.leaseId(),
+                command.id(), assignment.fencingToken());
+        assertTrue(executionCommands.nextForPeer(identity).isEmpty());
+        assertEquals(1L, count("SELECT COUNT(*) FROM lease_execution_command_staging "
+                + "WHERE command_id = ?", command.id()));
+    }
+
+    @Test
+    void scopedInputReadRequiresStagedCurrentCommandAndVerifiesEveryByte() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = verifiedQueuedJob(recipeId);
+        byte[] input = "{\"small\":\"bounded test request\"}".getBytes(StandardCharsets.US_ASCII);
+        byte[] manifest = ("{\"files\":[{\"path\":\"request.json\",\"sha256\":\""
+                + sha256(input) + "\",\"sizeBytes\":" + input.length
+                + "}],\"schemaVersion\":1}").getBytes(StandardCharsets.US_ASCII);
+        String prefix = "jobs/" + jobId + "/verified/snapshot/";
+        jdbc.update("""
+                UPDATE jobs SET input_manifest_sha256 = ?, verified_input_manifest_sha256 = ?,
+                    input_artifact_prefix = ?, input_total_bytes = ? WHERE id = ?
+                """, sha256(manifest), sha256(manifest), prefix, input.length, jobId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        LeaseExecutionCommand command = executionCommands.prepareForPeer(identity,
+                assignment.leaseId(), assignment.fencingToken());
+        Map<String, byte[]> content = new HashMap<>();
+        content.put(prefix + "manifest.json", manifest);
+        content.put(prefix + "files/request.json", input);
+        InputObjectStore objects = new InputObjectStore() {
+            @Override public InputStream get(String key) {
+                byte[] value = content.get(key);
+                if (value == null) {
+                    throw new InputObjectMissingException();
+                }
+                return new ByteArrayInputStream(value);
+            }
+            @Override public void put(String key, byte[] bytes) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public boolean putIfAbsent(String key, byte[] bytes) {
+                throw new UnsupportedOperationException();
+            }
+        };
+        ScopedInputReadService reader = new ScopedInputReadService(jdbc, executionPlans, objects);
+        assertThrows(LeaseExecutionDeniedException.class, () -> reader.readFile(identity,
+                assignment.leaseId(), command.id(), assignment.fencingToken(), "request.json"));
+        executionCommands.acknowledgeStaged(identity, assignment.leaseId(), command.id(),
+                assignment.fencingToken());
+        assertEquals(new String(input, StandardCharsets.US_ASCII),
+                new String(reader.readFile(identity, assignment.leaseId(), command.id(),
+                        assignment.fencingToken(), "request.json"), StandardCharsets.US_ASCII));
+        assertThrows(LeaseExecutionDeniedException.class, () -> reader.readFile(identity,
+                assignment.leaseId(), command.id(), assignment.fencingToken(), "../request.json"));
+        assertThrows(LeaseExecutionDeniedException.class, () -> reader.readFile(identity,
+                assignment.leaseId(), UUID.randomUUID(), assignment.fencingToken(), "request.json"));
+        content.put(prefix + "files/request.json", "corrupted".getBytes(StandardCharsets.US_ASCII));
+        assertThrows(LeaseExecutionDeniedException.class, () -> reader.readFile(identity,
+                assignment.leaseId(), command.id(), assignment.fencingToken(), "request.json"));
+        content.put(prefix + "files/request.json", input);
+        jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP "
+                + "WHERE node_id = ?", nodeId);
+        assertThrows(LeaseExecutionDeniedException.class, () -> reader.readFile(identity,
+                assignment.leaseId(), command.id(), assignment.fencingToken(), "request.json"));
+    }
+
+    @Test
+    void preparedCommandRejectsChangedRecipeAndDatabaseUpdates() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+        LeaseExecutionCommand command = executionCommands.prepareForPeer(
+                identity, assignment.leaseId(), assignment.fencingToken());
+
+        jdbc.update("UPDATE workload_recipes SET image_digest = ? WHERE id = ?",
+                "sha256:" + "b".repeat(64), recipeId);
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.prepareForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        assertEquals("sha256:" + DIGEST,
+                value("SELECT image_digest FROM lease_execution_commands WHERE id = ?", command.id()));
+        assertThrows(DataAccessException.class,
+                () -> jdbc.update("UPDATE lease_execution_commands SET image_digest = ? WHERE id = ?",
+                        "sha256:" + "b".repeat(64), command.id()));
+    }
+
+    @Test
+    void commandPreparationRejectsWrongPeerTokenAndLegacyJob() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.prepareForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        assertEquals(0L, count("SELECT COUNT(*) FROM lease_execution_commands WHERE lease_id = ?",
+                assignment.leaseId()));
+
+        UUID verifiedRecipe = recipe(1024L * 1024 * 1024);
+        verifiedQueuedJob(verifiedRecipe);
+        UUID secondNode = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment second = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity secondPeer = peer(secondNode, "second");
+        acknowledgements.acknowledge(secondPeer, second.leaseId(), second.fencingToken());
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.prepareForPeer(identity, second.leaseId(),
+                        second.fencingToken()));
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionCommands.prepareForPeer(secondPeer, second.leaseId(),
+                        second.fencingToken() + 1));
+        assertEquals(0L, count("SELECT COUNT(*) FROM lease_execution_commands WHERE lease_id = ?",
+                second.leaseId()));
+    }
+
+    @Test
+    void executionPlanRejectsLegacyJobAndWrongPeerOrToken() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        queuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+
+        UUID verifiedRecipe = recipe(1024L * 1024 * 1024);
+        verifiedQueuedJob(verifiedRecipe);
+        UUID secondNode = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment second = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity secondPeer = peer(secondNode, "second");
+        acknowledgements.acknowledge(secondPeer, second.leaseId(), second.fencingToken());
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, second.leaseId(),
+                        second.fencingToken()));
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(secondPeer, second.leaseId(),
+                        second.fencingToken() + 1));
+    }
+
+    @Test
+    void executionPlanRejectsRevocationRecipeDisableAndExpiry() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment assignment = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "active");
+        acknowledgements.acknowledge(identity, assignment.leaseId(), assignment.fencingToken());
+
+        jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP WHERE node_id = ?", nodeId);
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        jdbc.update("UPDATE provider_certificates SET revoked_at = NULL WHERE node_id = ?", nodeId);
+        jdbc.update("UPDATE workload_recipes SET state = 'DISABLED' WHERE id = ?", recipeId);
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        jdbc.update("UPDATE workload_recipes SET state = 'APPROVED' WHERE id = ?", recipeId);
+        jdbc.update("UPDATE provider_gpus SET verification_state = 'REJECTED', "
+                + "verified_at = NULL WHERE node_id = ?", nodeId);
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+        jdbc.update("UPDATE provider_gpus SET verification_state = 'VERIFIED', "
+                + "verified_at = CURRENT_TIMESTAMP WHERE node_id = ?", nodeId);
+        makeLeaseExpired(assignment.leaseId());
+        assertThrows(LeaseExecutionDeniedException.class,
+                () -> executionPlans.loadCurrentForPeer(identity, assignment.leaseId(),
+                        assignment.fencingToken()));
+    }
+
+    @Test
     void executionTransitionsRequireAcknowledgedLeaseAndQuarantineOnFailure() throws Exception {
         UUID recipeId = recipe(1024L * 1024 * 1024);
         UUID jobId = queuedJob(recipeId);
@@ -482,6 +750,21 @@ class SchedulerClaimServiceIntegrationTest {
         return id;
     }
 
+    private UUID verifiedQueuedJob(UUID recipeId) {
+        UUID id = UUID.randomUUID();
+        jobs.add(id);
+        jdbc.update("""
+                INSERT INTO jobs
+                    (id, requester_subject, recipe_id, state, idempotency_key,
+                     request_sha256, request_version, input_manifest_sha256,
+                     verified_input_manifest_sha256, input_artifact_prefix,
+                     input_verified_at, input_file_count, input_total_bytes)
+                VALUES (?, ?, ?, 'QUEUED', ?, ?, 1, ?, ?, ?, CURRENT_TIMESTAMP, 1, 32)
+                """, id, "claim-test:" + id, recipeId, id.toString(), DIGEST,
+                DIGEST, DIGEST, "jobs/" + id + "/verified/snapshot");
+        return id;
+    }
+
     private UUID provider(long vram) {
         UUID id = UUID.randomUUID();
         nodes.add(id);
@@ -513,5 +796,13 @@ class SchedulerClaimServiceIntegrationTest {
     private long count(String sql, Object... arguments) {
         Long result = jdbc.queryForObject(sql, Long.class, arguments);
         return result == null ? 0 : result;
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 }

@@ -1,11 +1,13 @@
 package session
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	agentv1 "github.com/appalla-karthik/Hyperlooms/agents/provider/gen/hyperlooms/agent/v1"
@@ -13,16 +15,30 @@ import (
 
 const journalFile = "lease-receipt.json"
 
-// savedLease is a receipt record, not permission or instructions to run a job.
+// savedLease records transport receipt and optional command staging, never permission to run.
 type savedLease struct {
-	NodeID       string     `json:"nodeId"`
-	JobID        string     `json:"jobId"`
-	AttemptID    string     `json:"attemptId"`
-	LeaseID      string     `json:"leaseId"`
-	GPUUUID      string     `json:"gpuUuid"`
-	FencingToken uint64     `json:"fencingToken"`
-	ExpiresAt    time.Time  `json:"expiresAt"`
-	ConfirmedAt  *time.Time `json:"confirmedAt,omitempty"`
+	NodeID       string        `json:"nodeId"`
+	JobID        string        `json:"jobId"`
+	AttemptID    string        `json:"attemptId"`
+	LeaseID      string        `json:"leaseId"`
+	GPUUUID      string        `json:"gpuUuid"`
+	FencingToken uint64        `json:"fencingToken"`
+	ExpiresAt    time.Time     `json:"expiresAt"`
+	ConfirmedAt  *time.Time    `json:"confirmedAt,omitempty"`
+	Command      *savedCommand `json:"command,omitempty"`
+}
+
+type savedCommand struct {
+	CommandID           string     `json:"commandId"`
+	ImageRepository     string     `json:"imageRepository"`
+	ImageDigest         string     `json:"imageDigest"`
+	MaxRuntimeSeconds   uint32     `json:"maxRuntimeSeconds"`
+	VerifiedInputPrefix string     `json:"verifiedInputPrefix"`
+	InputManifestSHA256 string     `json:"inputManifestSha256"`
+	InputFileCount      uint32     `json:"inputFileCount"`
+	InputTotalBytes     uint64     `json:"inputTotalBytes"`
+	StagedAt            time.Time  `json:"stagedAt"`
+	ServerConfirmedAt   *time.Time `json:"serverConfirmedAt,omitempty"`
 }
 
 type leaseJournal struct {
@@ -60,11 +76,104 @@ func openLeaseJournal(dir, nodeID string) (*leaseJournal, error) {
 	var saved savedLease
 	if err := json.Unmarshal(content, &saved); err != nil || saved.NodeID != nodeID ||
 		!validUUID(saved.JobID) || !validUUID(saved.AttemptID) || !validUUID(saved.LeaseID) ||
-		saved.GPUUUID == "" || saved.FencingToken == 0 || saved.ExpiresAt.IsZero() {
+		saved.GPUUUID == "" || saved.FencingToken == 0 || saved.ExpiresAt.IsZero() ||
+		(saved.Command != nil && (saved.ConfirmedAt == nil || !validSavedCommand(saved.Command, saved.JobID))) {
 		return nil, fmt.Errorf("lease receipt file is invalid or belongs to another node")
 	}
 	journal.active = &saved
 	return journal, nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 64 || strings.ToLower(value) != value {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+func validSavedCommand(command *savedCommand, jobID string) bool {
+	if command == nil || !validUUID(command.CommandID) ||
+		len(command.ImageRepository) == 0 || len(command.ImageRepository) > 500 ||
+		strings.ContainsAny(command.ImageRepository, "@\\ \t\r\n") ||
+		!strings.HasPrefix(command.ImageDigest, "sha256:") ||
+		!validSHA256(strings.TrimPrefix(command.ImageDigest, "sha256:")) ||
+		command.MaxRuntimeSeconds == 0 || command.MaxRuntimeSeconds > 86400 ||
+		len(command.VerifiedInputPrefix) > 1000 ||
+		!strings.HasPrefix(command.VerifiedInputPrefix, "jobs/"+jobID+"/verified/") ||
+		strings.Contains(command.VerifiedInputPrefix, "..") ||
+		strings.Contains(command.VerifiedInputPrefix, "\\") ||
+		!validSHA256(command.InputManifestSHA256) ||
+		command.InputFileCount > 256 || command.InputTotalBytes > 32*1024*1024 ||
+		command.StagedAt.IsZero() {
+		return false
+	}
+	return true
+}
+
+func (journal *leaseJournal) stageCommand(command *agentv1.ExecutionCommand) error {
+	if journal == nil || journal.active == nil || journal.active.ConfirmedAt == nil || command == nil {
+		return fmt.Errorf("confirmed lease receipt required before command staging")
+	}
+	lease := journal.active
+	if command.GetNodeId() != lease.NodeID || command.GetJobId() != lease.JobID ||
+		command.GetAttemptId() != lease.AttemptID || command.GetLeaseId() != lease.LeaseID ||
+		command.GetGpuUuid() != lease.GPUUUID || command.GetFencingToken() != lease.FencingToken ||
+		command.GetExpiresAt() == nil || command.GetExpiresAt().CheckValid() != nil ||
+		!command.GetExpiresAt().AsTime().Equal(lease.ExpiresAt) ||
+		!lease.ExpiresAt.After(time.Now()) {
+		return fmt.Errorf("command does not match current unexpired lease")
+	}
+	next := savedCommand{
+		CommandID: command.GetCommandId(), ImageRepository: command.GetImageRepository(),
+		ImageDigest: command.GetImageDigest(), MaxRuntimeSeconds: command.GetMaxRuntimeSeconds(),
+		VerifiedInputPrefix: command.GetVerifiedInputPrefix(),
+		InputManifestSHA256: command.GetInputManifestSha256(),
+		InputFileCount:      command.GetInputFileCount(), InputTotalBytes: command.GetInputTotalBytes(),
+		StagedAt: time.Now().UTC(),
+	}
+	if !validSavedCommand(&next, lease.JobID) {
+		return fmt.Errorf("invalid command payload")
+	}
+	if lease.Command != nil {
+		current := lease.Command
+		if current.CommandID == next.CommandID &&
+			current.ImageRepository == next.ImageRepository && current.ImageDigest == next.ImageDigest &&
+			current.MaxRuntimeSeconds == next.MaxRuntimeSeconds &&
+			current.VerifiedInputPrefix == next.VerifiedInputPrefix &&
+			current.InputManifestSHA256 == next.InputManifestSHA256 &&
+			current.InputFileCount == next.InputFileCount && current.InputTotalBytes == next.InputTotalBytes {
+			return nil
+		}
+		return fmt.Errorf("conflicting command for active lease")
+	}
+	updated := *lease
+	updated.Command = &next
+	if err := journal.write(updated); err != nil {
+		return err
+	}
+	journal.active = &updated
+	return nil
+}
+
+func (journal *leaseJournal) confirmCommand(commandID string) error {
+	if journal == nil || journal.active == nil || journal.active.Command == nil ||
+		journal.active.Command.CommandID != commandID {
+		return fmt.Errorf("command staging acknowledgement does not match local journal")
+	}
+	if journal.active.Command.ServerConfirmedAt != nil {
+		return nil
+	}
+	updated := *journal.active
+	command := *updated.Command
+	now := time.Now().UTC()
+	command.ServerConfirmedAt = &now
+	updated.Command = &command
+	if err := journal.write(updated); err != nil {
+		return err
+	}
+	journal.active = &updated
+	return nil
 }
 
 func (journal *leaseJournal) store(offer *agentv1.LeaseOffer) error {
