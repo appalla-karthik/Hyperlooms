@@ -36,7 +36,8 @@ class AgentPeerInterceptorTest {
     @Test
     void failsClosedWhenTlsEnabledWithoutCertificatePaths() {
         AgentGrpcServer server = new AgentGrpcServer(9090, "", "", "",
-                mock(AgentSessionGrpcService.class), mock(AgentArtifactGrpcService.class));
+                mock(AgentSessionGrpcService.class), mock(AgentArtifactGrpcService.class),
+                mock(AgentExecutionGrpcService.class));
         assertThrows(IllegalStateException.class, server::start);
     }
 }

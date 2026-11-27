@@ -113,6 +113,15 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	pendingReceipts := make(map[string]string)
 	pendingCommands := make(map[string]string)
 	fetchedCommandID := ""
+	var workerDone chan struct{}
+	defer func() {
+		cancelSession()
+		if workerDone != nil {
+			// Never reconnect while the previous worker may still own a Docker
+			// container. A stuck cleanup must fail closed, not start another run.
+			<-workerDone
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -141,6 +150,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 			state.Heartbeat()
 			if cfg.InputReadEnabled && journal.active != nil && journal.active.Command != nil &&
 				journal.active.Command.ServerConfirmedAt != nil &&
+				journal.active.Command.ExecutionStartedAt == nil &&
 				journal.active.Command.CommandID != fetchedCommandID {
 				input, err := fetchInput(ctx, agentv1.NewAgentArtifactServiceClient(connection), journal)
 				if err != nil {
@@ -148,8 +158,31 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 				}
 				checksum := sha256.Sum256(input)
 				fetchedCommandID = journal.active.Command.CommandID
-				logger.Info("staged input verified; execution not started",
-					"command_id", fetchedCommandID, "bytes", len(input), "sha256", fmt.Sprintf("%x", checksum))
+				logger.Info("staged input verified", "command_id", fetchedCommandID,
+					"bytes", len(input), "sha256", fmt.Sprintf("%x", checksum))
+				if cfg.ExecutionEnabled {
+					if workerDone != nil {
+						select {
+						case <-workerDone:
+							workerDone = nil
+						default:
+							return fmt.Errorf("another execution worker is still active")
+						}
+					}
+					lease := *journal.active
+					command := *lease.Command
+					lease.Command = &command
+					if err := journal.markExecutionStarted(command.CommandID); err != nil {
+						return fmt.Errorf("persist execution attempt: %w", err)
+					}
+					workerDone = make(chan struct{})
+					go func() {
+						defer close(workerDone)
+						if err := executeLease(sessionCtx, connection, lease, input, logger); err != nil {
+							logger.Error("lease execution failed", "lease_id", lease.LeaseID, "error", err)
+						}
+					}()
+				}
 			}
 		}
 	}

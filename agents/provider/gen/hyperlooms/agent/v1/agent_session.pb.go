@@ -22,6 +22,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ExecutionAdvanceAction int32
+
+const (
+	ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_UNSPECIFIED ExecutionAdvanceAction = 0
+	ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_STARTING    ExecutionAdvanceAction = 1
+	ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_RUNNING     ExecutionAdvanceAction = 2
+	ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_RENEW       ExecutionAdvanceAction = 3
+	ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_FAILED      ExecutionAdvanceAction = 4
+)
+
+// Enum value maps for ExecutionAdvanceAction.
+var (
+	ExecutionAdvanceAction_name = map[int32]string{
+		0: "EXECUTION_ADVANCE_ACTION_UNSPECIFIED",
+		1: "EXECUTION_ADVANCE_ACTION_STARTING",
+		2: "EXECUTION_ADVANCE_ACTION_RUNNING",
+		3: "EXECUTION_ADVANCE_ACTION_RENEW",
+		4: "EXECUTION_ADVANCE_ACTION_FAILED",
+	}
+	ExecutionAdvanceAction_value = map[string]int32{
+		"EXECUTION_ADVANCE_ACTION_UNSPECIFIED": 0,
+		"EXECUTION_ADVANCE_ACTION_STARTING":    1,
+		"EXECUTION_ADVANCE_ACTION_RUNNING":     2,
+		"EXECUTION_ADVANCE_ACTION_RENEW":       3,
+		"EXECUTION_ADVANCE_ACTION_FAILED":      4,
+	}
+)
+
+func (x ExecutionAdvanceAction) Enum() *ExecutionAdvanceAction {
+	p := new(ExecutionAdvanceAction)
+	*p = x
+	return p
+}
+
+func (x ExecutionAdvanceAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ExecutionAdvanceAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_hyperlooms_agent_v1_agent_session_proto_enumTypes[0].Descriptor()
+}
+
+func (ExecutionAdvanceAction) Type() protoreflect.EnumType {
+	return &file_hyperlooms_agent_v1_agent_session_proto_enumTypes[0]
+}
+
+func (x ExecutionAdvanceAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ExecutionAdvanceAction.Descriptor instead.
+func (ExecutionAdvanceAction) EnumDescriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{0}
+}
+
 type AvailabilityState int32
 
 const (
@@ -61,11 +116,11 @@ func (x AvailabilityState) String() string {
 }
 
 func (AvailabilityState) Descriptor() protoreflect.EnumDescriptor {
-	return file_hyperlooms_agent_v1_agent_session_proto_enumTypes[0].Descriptor()
+	return file_hyperlooms_agent_v1_agent_session_proto_enumTypes[1].Descriptor()
 }
 
 func (AvailabilityState) Type() protoreflect.EnumType {
-	return &file_hyperlooms_agent_v1_agent_session_proto_enumTypes[0]
+	return &file_hyperlooms_agent_v1_agent_session_proto_enumTypes[1]
 }
 
 func (x AvailabilityState) Number() protoreflect.EnumNumber {
@@ -74,7 +129,7 @@ func (x AvailabilityState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AvailabilityState.Descriptor instead.
 func (AvailabilityState) EnumDescriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{0}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{1}
 }
 
 type HelloRejectionReason int32
@@ -116,11 +171,11 @@ func (x HelloRejectionReason) String() string {
 }
 
 func (HelloRejectionReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_hyperlooms_agent_v1_agent_session_proto_enumTypes[1].Descriptor()
+	return file_hyperlooms_agent_v1_agent_session_proto_enumTypes[2].Descriptor()
 }
 
 func (HelloRejectionReason) Type() protoreflect.EnumType {
-	return &file_hyperlooms_agent_v1_agent_session_proto_enumTypes[1]
+	return &file_hyperlooms_agent_v1_agent_session_proto_enumTypes[2]
 }
 
 func (x HelloRejectionReason) Number() protoreflect.EnumNumber {
@@ -129,7 +184,263 @@ func (x HelloRejectionReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HelloRejectionReason.Descriptor instead.
 func (HelloRejectionReason) EnumDescriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{2}
+}
+
+type AdvanceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LeaseId       string                 `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	CommandId     string                 `protobuf:"bytes,2,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	FencingToken  uint64                 `protobuf:"varint,3,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	Action        ExecutionAdvanceAction `protobuf:"varint,4,opt,name=action,proto3,enum=hyperlooms.agent.v1.ExecutionAdvanceAction" json:"action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdvanceRequest) Reset() {
+	*x = AdvanceRequest{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdvanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdvanceRequest) ProtoMessage() {}
+
+func (x *AdvanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdvanceRequest.ProtoReflect.Descriptor instead.
+func (*AdvanceRequest) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AdvanceRequest) GetLeaseId() string {
+	if x != nil {
+		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *AdvanceRequest) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *AdvanceRequest) GetFencingToken() uint64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+func (x *AdvanceRequest) GetAction() ExecutionAdvanceAction {
+	if x != nil {
+		return x.Action
+	}
+	return ExecutionAdvanceAction_EXECUTION_ADVANCE_ACTION_UNSPECIFIED
+}
+
+type AdvanceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdvanceResponse) Reset() {
+	*x = AdvanceResponse{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdvanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdvanceResponse) ProtoMessage() {}
+
+func (x *AdvanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdvanceResponse.ProtoReflect.Descriptor instead.
+func (*AdvanceResponse) Descriptor() ([]byte, []int) {
 	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AdvanceResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type UploadResultRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LeaseId       string                 `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	CommandId     string                 `protobuf:"bytes,2,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	FencingToken  uint64                 `protobuf:"varint,3,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	Offset        uint64                 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Data          []byte                 `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	TotalBytes    uint64                 `protobuf:"varint,6,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	Sha256        string                 `protobuf:"bytes,7,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadResultRequest) Reset() {
+	*x = UploadResultRequest{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadResultRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadResultRequest) ProtoMessage() {}
+
+func (x *UploadResultRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadResultRequest.ProtoReflect.Descriptor instead.
+func (*UploadResultRequest) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UploadResultRequest) GetLeaseId() string {
+	if x != nil {
+		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *UploadResultRequest) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *UploadResultRequest) GetFencingToken() uint64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+func (x *UploadResultRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *UploadResultRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *UploadResultRequest) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *UploadResultRequest) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+type UploadResultResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sha256        string                 `protobuf:"bytes,1,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	TotalBytes    uint64                 `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadResultResponse) Reset() {
+	*x = UploadResultResponse{}
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadResultResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadResultResponse) ProtoMessage() {}
+
+func (x *UploadResultResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadResultResponse.ProtoReflect.Descriptor instead.
+func (*UploadResultResponse) Descriptor() ([]byte, []int) {
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UploadResultResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *UploadResultResponse) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
 }
 
 type ReadInputRequest struct {
@@ -143,7 +454,7 @@ type ReadInputRequest struct {
 
 func (x *ReadInputRequest) Reset() {
 	*x = ReadInputRequest{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[0]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -155,7 +466,7 @@ func (x *ReadInputRequest) String() string {
 func (*ReadInputRequest) ProtoMessage() {}
 
 func (x *ReadInputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[0]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -168,7 +479,7 @@ func (x *ReadInputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadInputRequest.ProtoReflect.Descriptor instead.
 func (*ReadInputRequest) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{0}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReadInputRequest) GetLeaseId() string {
@@ -204,7 +515,7 @@ type ReadInputResponse struct {
 
 func (x *ReadInputResponse) Reset() {
 	*x = ReadInputResponse{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[1]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -216,7 +527,7 @@ func (x *ReadInputResponse) String() string {
 func (*ReadInputResponse) ProtoMessage() {}
 
 func (x *ReadInputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[1]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -229,7 +540,7 @@ func (x *ReadInputResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadInputResponse.ProtoReflect.Descriptor instead.
 func (*ReadInputResponse) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{1}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ReadInputResponse) GetOffset() uint64 {
@@ -276,7 +587,7 @@ type ConnectRequest struct {
 
 func (x *ConnectRequest) Reset() {
 	*x = ConnectRequest{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[2]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -288,7 +599,7 @@ func (x *ConnectRequest) String() string {
 func (*ConnectRequest) ProtoMessage() {}
 
 func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[2]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -301,7 +612,7 @@ func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
 func (*ConnectRequest) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{2}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ConnectRequest) GetMessageId() string {
@@ -400,7 +711,7 @@ type ConnectResponse struct {
 
 func (x *ConnectResponse) Reset() {
 	*x = ConnectResponse{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[3]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -412,7 +723,7 @@ func (x *ConnectResponse) String() string {
 func (*ConnectResponse) ProtoMessage() {}
 
 func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[3]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -425,7 +736,7 @@ func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectResponse.ProtoReflect.Descriptor instead.
 func (*ConnectResponse) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{3}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ConnectResponse) GetMessageId() string {
@@ -551,7 +862,7 @@ type AgentHello struct {
 
 func (x *AgentHello) Reset() {
 	*x = AgentHello{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[4]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -563,7 +874,7 @@ func (x *AgentHello) String() string {
 func (*AgentHello) ProtoMessage() {}
 
 func (x *AgentHello) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[4]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -576,7 +887,7 @@ func (x *AgentHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentHello.ProtoReflect.Descriptor instead.
 func (*AgentHello) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{4}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AgentHello) GetNodeId() string {
@@ -635,7 +946,7 @@ type GpuCapability struct {
 
 func (x *GpuCapability) Reset() {
 	*x = GpuCapability{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[5]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +958,7 @@ func (x *GpuCapability) String() string {
 func (*GpuCapability) ProtoMessage() {}
 
 func (x *GpuCapability) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[5]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,7 +971,7 @@ func (x *GpuCapability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GpuCapability.ProtoReflect.Descriptor instead.
 func (*GpuCapability) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{5}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GpuCapability) GetGpuUuid() string {
@@ -710,7 +1021,7 @@ type AgentHeartbeat struct {
 
 func (x *AgentHeartbeat) Reset() {
 	*x = AgentHeartbeat{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[6]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +1033,7 @@ func (x *AgentHeartbeat) String() string {
 func (*AgentHeartbeat) ProtoMessage() {}
 
 func (x *AgentHeartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[6]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +1046,7 @@ func (x *AgentHeartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentHeartbeat.ProtoReflect.Descriptor instead.
 func (*AgentHeartbeat) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{6}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AgentHeartbeat) GetNodeId() string {
@@ -779,7 +1090,7 @@ type HelloAcknowledgement struct {
 
 func (x *HelloAcknowledgement) Reset() {
 	*x = HelloAcknowledgement{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1102,7 @@ func (x *HelloAcknowledgement) String() string {
 func (*HelloAcknowledgement) ProtoMessage() {}
 
 func (x *HelloAcknowledgement) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1115,7 @@ func (x *HelloAcknowledgement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloAcknowledgement.ProtoReflect.Descriptor instead.
 func (*HelloAcknowledgement) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{7}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *HelloAcknowledgement) GetRequestMessageId() string {
@@ -852,7 +1163,7 @@ type HeartbeatAcknowledgement struct {
 
 func (x *HeartbeatAcknowledgement) Reset() {
 	*x = HeartbeatAcknowledgement{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +1175,7 @@ func (x *HeartbeatAcknowledgement) String() string {
 func (*HeartbeatAcknowledgement) ProtoMessage() {}
 
 func (x *HeartbeatAcknowledgement) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[8]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +1188,7 @@ func (x *HeartbeatAcknowledgement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatAcknowledgement.ProtoReflect.Descriptor instead.
 func (*HeartbeatAcknowledgement) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{8}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HeartbeatAcknowledgement) GetRequestMessageId() string {
@@ -910,7 +1221,7 @@ type LeaseOffer struct {
 
 func (x *LeaseOffer) Reset() {
 	*x = LeaseOffer{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +1233,7 @@ func (x *LeaseOffer) String() string {
 func (*LeaseOffer) ProtoMessage() {}
 
 func (x *LeaseOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[9]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +1246,7 @@ func (x *LeaseOffer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseOffer.ProtoReflect.Descriptor instead.
 func (*LeaseOffer) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{9}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LeaseOffer) GetJobId() string {
@@ -998,7 +1309,7 @@ type AgentLeaseReceipt struct {
 
 func (x *AgentLeaseReceipt) Reset() {
 	*x = AgentLeaseReceipt{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[10]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1010,7 +1321,7 @@ func (x *AgentLeaseReceipt) String() string {
 func (*AgentLeaseReceipt) ProtoMessage() {}
 
 func (x *AgentLeaseReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[10]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1023,7 +1334,7 @@ func (x *AgentLeaseReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentLeaseReceipt.ProtoReflect.Descriptor instead.
 func (*AgentLeaseReceipt) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{10}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AgentLeaseReceipt) GetNodeId() string {
@@ -1058,7 +1369,7 @@ type LeaseReceiptAcknowledgement struct {
 
 func (x *LeaseReceiptAcknowledgement) Reset() {
 	*x = LeaseReceiptAcknowledgement{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[11]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1070,7 +1381,7 @@ func (x *LeaseReceiptAcknowledgement) String() string {
 func (*LeaseReceiptAcknowledgement) ProtoMessage() {}
 
 func (x *LeaseReceiptAcknowledgement) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[11]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1083,7 +1394,7 @@ func (x *LeaseReceiptAcknowledgement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseReceiptAcknowledgement.ProtoReflect.Descriptor instead.
 func (*LeaseReceiptAcknowledgement) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{11}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LeaseReceiptAcknowledgement) GetRequestMessageId() string {
@@ -1131,7 +1442,7 @@ type ExecutionCommand struct {
 
 func (x *ExecutionCommand) Reset() {
 	*x = ExecutionCommand{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[12]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1143,7 +1454,7 @@ func (x *ExecutionCommand) String() string {
 func (*ExecutionCommand) ProtoMessage() {}
 
 func (x *ExecutionCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[12]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1156,7 +1467,7 @@ func (x *ExecutionCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionCommand.ProtoReflect.Descriptor instead.
 func (*ExecutionCommand) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{12}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ExecutionCommand) GetCommandId() string {
@@ -1276,7 +1587,7 @@ type AgentCommandStaged struct {
 
 func (x *AgentCommandStaged) Reset() {
 	*x = AgentCommandStaged{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[13]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1288,7 +1599,7 @@ func (x *AgentCommandStaged) String() string {
 func (*AgentCommandStaged) ProtoMessage() {}
 
 func (x *AgentCommandStaged) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[13]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1301,7 +1612,7 @@ func (x *AgentCommandStaged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentCommandStaged.ProtoReflect.Descriptor instead.
 func (*AgentCommandStaged) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{13}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AgentCommandStaged) GetNodeId() string {
@@ -1343,7 +1654,7 @@ type CommandStagedAcknowledgement struct {
 
 func (x *CommandStagedAcknowledgement) Reset() {
 	*x = CommandStagedAcknowledgement{}
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[14]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1355,7 +1666,7 @@ func (x *CommandStagedAcknowledgement) String() string {
 func (*CommandStagedAcknowledgement) ProtoMessage() {}
 
 func (x *CommandStagedAcknowledgement) ProtoReflect() protoreflect.Message {
-	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[14]
+	mi := &file_hyperlooms_agent_v1_agent_session_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1368,7 +1679,7 @@ func (x *CommandStagedAcknowledgement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandStagedAcknowledgement.ProtoReflect.Descriptor instead.
 func (*CommandStagedAcknowledgement) Descriptor() ([]byte, []int) {
-	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{14}
+	return file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CommandStagedAcknowledgement) GetRequestMessageId() string {
@@ -1396,7 +1707,30 @@ var File_hyperlooms_agent_v1_agent_session_proto protoreflect.FileDescriptor
 
 const file_hyperlooms_agent_v1_agent_session_proto_rawDesc = "" +
 	"\n" +
-	"'hyperlooms/agent/v1/agent_session.proto\x12\x13hyperlooms.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"q\n" +
+	"'hyperlooms/agent/v1/agent_session.proto\x12\x13hyperlooms.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x01\n" +
+	"\x0eAdvanceRequest\x12\x19\n" +
+	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x02 \x01(\tR\tcommandId\x12#\n" +
+	"\rfencing_token\x18\x03 \x01(\x04R\ffencingToken\x12C\n" +
+	"\x06action\x18\x04 \x01(\x0e2+.hyperlooms.agent.v1.ExecutionAdvanceActionR\x06action\"L\n" +
+	"\x0fAdvanceResponse\x129\n" +
+	"\n" +
+	"expires_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xd9\x01\n" +
+	"\x13UploadResultRequest\x12\x19\n" +
+	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x02 \x01(\tR\tcommandId\x12#\n" +
+	"\rfencing_token\x18\x03 \x01(\x04R\ffencingToken\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x04R\x06offset\x12\x12\n" +
+	"\x04data\x18\x05 \x01(\fR\x04data\x12\x1f\n" +
+	"\vtotal_bytes\x18\x06 \x01(\x04R\n" +
+	"totalBytes\x12\x16\n" +
+	"\x06sha256\x18\a \x01(\tR\x06sha256\"O\n" +
+	"\x14UploadResultResponse\x12\x16\n" +
+	"\x06sha256\x18\x01 \x01(\tR\x06sha256\x12\x1f\n" +
+	"\vtotal_bytes\x18\x02 \x01(\x04R\n" +
+	"totalBytes\"q\n" +
 	"\x10ReadInputRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12\x1d\n" +
 	"\n" +
@@ -1512,7 +1846,13 @@ const file_hyperlooms_agent_v1_agent_session_proto_rawDesc = "" +
 	"\n" +
 	"command_id\x18\x02 \x01(\tR\tcommandId\x12;\n" +
 	"\vserver_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"serverTime*\xb7\x01\n" +
+	"serverTime*\xd8\x01\n" +
+	"\x16ExecutionAdvanceAction\x12(\n" +
+	"$EXECUTION_ADVANCE_ACTION_UNSPECIFIED\x10\x00\x12%\n" +
+	"!EXECUTION_ADVANCE_ACTION_STARTING\x10\x01\x12$\n" +
+	" EXECUTION_ADVANCE_ACTION_RUNNING\x10\x02\x12\"\n" +
+	"\x1eEXECUTION_ADVANCE_ACTION_RENEW\x10\x03\x12#\n" +
+	"\x1fEXECUTION_ADVANCE_ACTION_FAILED\x10\x04*\xb7\x01\n" +
 	"\x11AvailabilityState\x12\"\n" +
 	"\x1eAVAILABILITY_STATE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aAVAILABILITY_STATE_OFFLINE\x10\x01\x12 \n" +
@@ -1528,7 +1868,10 @@ const file_hyperlooms_agent_v1_agent_session_proto_rawDesc = "" +
 	"\x13AgentSessionService\x12X\n" +
 	"\aConnect\x12#.hyperlooms.agent.v1.ConnectRequest\x1a$.hyperlooms.agent.v1.ConnectResponse(\x010\x012t\n" +
 	"\x14AgentArtifactService\x12\\\n" +
-	"\tReadInput\x12%.hyperlooms.agent.v1.ReadInputRequest\x1a&.hyperlooms.agent.v1.ReadInputResponse0\x01B{\n" +
+	"\tReadInput\x12%.hyperlooms.agent.v1.ReadInputRequest\x1a&.hyperlooms.agent.v1.ReadInputResponse0\x012\xd4\x01\n" +
+	"\x15AgentExecutionService\x12T\n" +
+	"\aAdvance\x12#.hyperlooms.agent.v1.AdvanceRequest\x1a$.hyperlooms.agent.v1.AdvanceResponse\x12e\n" +
+	"\fUploadResult\x12(.hyperlooms.agent.v1.UploadResultRequest\x1a).hyperlooms.agent.v1.UploadResultResponse(\x01B{\n" +
 	" dev.hyperlooms.protocol.agent.v1P\x01ZUgithub.com/appalla-karthik/Hyperlooms/agents/provider/gen/hyperlooms/agent/v1;agentv1b\x06proto3"
 
 var (
@@ -1543,59 +1886,70 @@ func file_hyperlooms_agent_v1_agent_session_proto_rawDescGZIP() []byte {
 	return file_hyperlooms_agent_v1_agent_session_proto_rawDescData
 }
 
-var file_hyperlooms_agent_v1_agent_session_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hyperlooms_agent_v1_agent_session_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_hyperlooms_agent_v1_agent_session_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_hyperlooms_agent_v1_agent_session_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_hyperlooms_agent_v1_agent_session_proto_goTypes = []any{
-	(AvailabilityState)(0),               // 0: hyperlooms.agent.v1.AvailabilityState
-	(HelloRejectionReason)(0),            // 1: hyperlooms.agent.v1.HelloRejectionReason
-	(*ReadInputRequest)(nil),             // 2: hyperlooms.agent.v1.ReadInputRequest
-	(*ReadInputResponse)(nil),            // 3: hyperlooms.agent.v1.ReadInputResponse
-	(*ConnectRequest)(nil),               // 4: hyperlooms.agent.v1.ConnectRequest
-	(*ConnectResponse)(nil),              // 5: hyperlooms.agent.v1.ConnectResponse
-	(*AgentHello)(nil),                   // 6: hyperlooms.agent.v1.AgentHello
-	(*GpuCapability)(nil),                // 7: hyperlooms.agent.v1.GpuCapability
-	(*AgentHeartbeat)(nil),               // 8: hyperlooms.agent.v1.AgentHeartbeat
-	(*HelloAcknowledgement)(nil),         // 9: hyperlooms.agent.v1.HelloAcknowledgement
-	(*HeartbeatAcknowledgement)(nil),     // 10: hyperlooms.agent.v1.HeartbeatAcknowledgement
-	(*LeaseOffer)(nil),                   // 11: hyperlooms.agent.v1.LeaseOffer
-	(*AgentLeaseReceipt)(nil),            // 12: hyperlooms.agent.v1.AgentLeaseReceipt
-	(*LeaseReceiptAcknowledgement)(nil),  // 13: hyperlooms.agent.v1.LeaseReceiptAcknowledgement
-	(*ExecutionCommand)(nil),             // 14: hyperlooms.agent.v1.ExecutionCommand
-	(*AgentCommandStaged)(nil),           // 15: hyperlooms.agent.v1.AgentCommandStaged
-	(*CommandStagedAcknowledgement)(nil), // 16: hyperlooms.agent.v1.CommandStagedAcknowledgement
-	(*timestamppb.Timestamp)(nil),        // 17: google.protobuf.Timestamp
+	(ExecutionAdvanceAction)(0),          // 0: hyperlooms.agent.v1.ExecutionAdvanceAction
+	(AvailabilityState)(0),               // 1: hyperlooms.agent.v1.AvailabilityState
+	(HelloRejectionReason)(0),            // 2: hyperlooms.agent.v1.HelloRejectionReason
+	(*AdvanceRequest)(nil),               // 3: hyperlooms.agent.v1.AdvanceRequest
+	(*AdvanceResponse)(nil),              // 4: hyperlooms.agent.v1.AdvanceResponse
+	(*UploadResultRequest)(nil),          // 5: hyperlooms.agent.v1.UploadResultRequest
+	(*UploadResultResponse)(nil),         // 6: hyperlooms.agent.v1.UploadResultResponse
+	(*ReadInputRequest)(nil),             // 7: hyperlooms.agent.v1.ReadInputRequest
+	(*ReadInputResponse)(nil),            // 8: hyperlooms.agent.v1.ReadInputResponse
+	(*ConnectRequest)(nil),               // 9: hyperlooms.agent.v1.ConnectRequest
+	(*ConnectResponse)(nil),              // 10: hyperlooms.agent.v1.ConnectResponse
+	(*AgentHello)(nil),                   // 11: hyperlooms.agent.v1.AgentHello
+	(*GpuCapability)(nil),                // 12: hyperlooms.agent.v1.GpuCapability
+	(*AgentHeartbeat)(nil),               // 13: hyperlooms.agent.v1.AgentHeartbeat
+	(*HelloAcknowledgement)(nil),         // 14: hyperlooms.agent.v1.HelloAcknowledgement
+	(*HeartbeatAcknowledgement)(nil),     // 15: hyperlooms.agent.v1.HeartbeatAcknowledgement
+	(*LeaseOffer)(nil),                   // 16: hyperlooms.agent.v1.LeaseOffer
+	(*AgentLeaseReceipt)(nil),            // 17: hyperlooms.agent.v1.AgentLeaseReceipt
+	(*LeaseReceiptAcknowledgement)(nil),  // 18: hyperlooms.agent.v1.LeaseReceiptAcknowledgement
+	(*ExecutionCommand)(nil),             // 19: hyperlooms.agent.v1.ExecutionCommand
+	(*AgentCommandStaged)(nil),           // 20: hyperlooms.agent.v1.AgentCommandStaged
+	(*CommandStagedAcknowledgement)(nil), // 21: hyperlooms.agent.v1.CommandStagedAcknowledgement
+	(*timestamppb.Timestamp)(nil),        // 22: google.protobuf.Timestamp
 }
 var file_hyperlooms_agent_v1_agent_session_proto_depIdxs = []int32{
-	6,  // 0: hyperlooms.agent.v1.ConnectRequest.hello:type_name -> hyperlooms.agent.v1.AgentHello
-	8,  // 1: hyperlooms.agent.v1.ConnectRequest.heartbeat:type_name -> hyperlooms.agent.v1.AgentHeartbeat
-	12, // 2: hyperlooms.agent.v1.ConnectRequest.lease_receipt:type_name -> hyperlooms.agent.v1.AgentLeaseReceipt
-	15, // 3: hyperlooms.agent.v1.ConnectRequest.command_staged:type_name -> hyperlooms.agent.v1.AgentCommandStaged
-	9,  // 4: hyperlooms.agent.v1.ConnectResponse.hello_acknowledgement:type_name -> hyperlooms.agent.v1.HelloAcknowledgement
-	10, // 5: hyperlooms.agent.v1.ConnectResponse.heartbeat_acknowledgement:type_name -> hyperlooms.agent.v1.HeartbeatAcknowledgement
-	11, // 6: hyperlooms.agent.v1.ConnectResponse.lease_offer:type_name -> hyperlooms.agent.v1.LeaseOffer
-	13, // 7: hyperlooms.agent.v1.ConnectResponse.lease_receipt_acknowledgement:type_name -> hyperlooms.agent.v1.LeaseReceiptAcknowledgement
-	14, // 8: hyperlooms.agent.v1.ConnectResponse.execution_command:type_name -> hyperlooms.agent.v1.ExecutionCommand
-	16, // 9: hyperlooms.agent.v1.ConnectResponse.command_staged_acknowledgement:type_name -> hyperlooms.agent.v1.CommandStagedAcknowledgement
-	7,  // 10: hyperlooms.agent.v1.AgentHello.gpus:type_name -> hyperlooms.agent.v1.GpuCapability
-	17, // 11: hyperlooms.agent.v1.AgentHello.reported_at:type_name -> google.protobuf.Timestamp
-	0,  // 12: hyperlooms.agent.v1.AgentHeartbeat.availability:type_name -> hyperlooms.agent.v1.AvailabilityState
-	17, // 13: hyperlooms.agent.v1.AgentHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	1,  // 14: hyperlooms.agent.v1.HelloAcknowledgement.rejection_reason:type_name -> hyperlooms.agent.v1.HelloRejectionReason
-	17, // 15: hyperlooms.agent.v1.HelloAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	17, // 16: hyperlooms.agent.v1.HeartbeatAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	17, // 17: hyperlooms.agent.v1.LeaseOffer.expires_at:type_name -> google.protobuf.Timestamp
-	17, // 18: hyperlooms.agent.v1.LeaseReceiptAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	17, // 19: hyperlooms.agent.v1.ExecutionCommand.expires_at:type_name -> google.protobuf.Timestamp
-	17, // 20: hyperlooms.agent.v1.CommandStagedAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
-	4,  // 21: hyperlooms.agent.v1.AgentSessionService.Connect:input_type -> hyperlooms.agent.v1.ConnectRequest
-	2,  // 22: hyperlooms.agent.v1.AgentArtifactService.ReadInput:input_type -> hyperlooms.agent.v1.ReadInputRequest
-	5,  // 23: hyperlooms.agent.v1.AgentSessionService.Connect:output_type -> hyperlooms.agent.v1.ConnectResponse
-	3,  // 24: hyperlooms.agent.v1.AgentArtifactService.ReadInput:output_type -> hyperlooms.agent.v1.ReadInputResponse
-	23, // [23:25] is the sub-list for method output_type
-	21, // [21:23] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	0,  // 0: hyperlooms.agent.v1.AdvanceRequest.action:type_name -> hyperlooms.agent.v1.ExecutionAdvanceAction
+	22, // 1: hyperlooms.agent.v1.AdvanceResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 2: hyperlooms.agent.v1.ConnectRequest.hello:type_name -> hyperlooms.agent.v1.AgentHello
+	13, // 3: hyperlooms.agent.v1.ConnectRequest.heartbeat:type_name -> hyperlooms.agent.v1.AgentHeartbeat
+	17, // 4: hyperlooms.agent.v1.ConnectRequest.lease_receipt:type_name -> hyperlooms.agent.v1.AgentLeaseReceipt
+	20, // 5: hyperlooms.agent.v1.ConnectRequest.command_staged:type_name -> hyperlooms.agent.v1.AgentCommandStaged
+	14, // 6: hyperlooms.agent.v1.ConnectResponse.hello_acknowledgement:type_name -> hyperlooms.agent.v1.HelloAcknowledgement
+	15, // 7: hyperlooms.agent.v1.ConnectResponse.heartbeat_acknowledgement:type_name -> hyperlooms.agent.v1.HeartbeatAcknowledgement
+	16, // 8: hyperlooms.agent.v1.ConnectResponse.lease_offer:type_name -> hyperlooms.agent.v1.LeaseOffer
+	18, // 9: hyperlooms.agent.v1.ConnectResponse.lease_receipt_acknowledgement:type_name -> hyperlooms.agent.v1.LeaseReceiptAcknowledgement
+	19, // 10: hyperlooms.agent.v1.ConnectResponse.execution_command:type_name -> hyperlooms.agent.v1.ExecutionCommand
+	21, // 11: hyperlooms.agent.v1.ConnectResponse.command_staged_acknowledgement:type_name -> hyperlooms.agent.v1.CommandStagedAcknowledgement
+	12, // 12: hyperlooms.agent.v1.AgentHello.gpus:type_name -> hyperlooms.agent.v1.GpuCapability
+	22, // 13: hyperlooms.agent.v1.AgentHello.reported_at:type_name -> google.protobuf.Timestamp
+	1,  // 14: hyperlooms.agent.v1.AgentHeartbeat.availability:type_name -> hyperlooms.agent.v1.AvailabilityState
+	22, // 15: hyperlooms.agent.v1.AgentHeartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	2,  // 16: hyperlooms.agent.v1.HelloAcknowledgement.rejection_reason:type_name -> hyperlooms.agent.v1.HelloRejectionReason
+	22, // 17: hyperlooms.agent.v1.HelloAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	22, // 18: hyperlooms.agent.v1.HeartbeatAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	22, // 19: hyperlooms.agent.v1.LeaseOffer.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 20: hyperlooms.agent.v1.LeaseReceiptAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	22, // 21: hyperlooms.agent.v1.ExecutionCommand.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 22: hyperlooms.agent.v1.CommandStagedAcknowledgement.server_time:type_name -> google.protobuf.Timestamp
+	9,  // 23: hyperlooms.agent.v1.AgentSessionService.Connect:input_type -> hyperlooms.agent.v1.ConnectRequest
+	7,  // 24: hyperlooms.agent.v1.AgentArtifactService.ReadInput:input_type -> hyperlooms.agent.v1.ReadInputRequest
+	3,  // 25: hyperlooms.agent.v1.AgentExecutionService.Advance:input_type -> hyperlooms.agent.v1.AdvanceRequest
+	5,  // 26: hyperlooms.agent.v1.AgentExecutionService.UploadResult:input_type -> hyperlooms.agent.v1.UploadResultRequest
+	10, // 27: hyperlooms.agent.v1.AgentSessionService.Connect:output_type -> hyperlooms.agent.v1.ConnectResponse
+	8,  // 28: hyperlooms.agent.v1.AgentArtifactService.ReadInput:output_type -> hyperlooms.agent.v1.ReadInputResponse
+	4,  // 29: hyperlooms.agent.v1.AgentExecutionService.Advance:output_type -> hyperlooms.agent.v1.AdvanceResponse
+	6,  // 30: hyperlooms.agent.v1.AgentExecutionService.UploadResult:output_type -> hyperlooms.agent.v1.UploadResultResponse
+	27, // [27:31] is the sub-list for method output_type
+	23, // [23:27] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_hyperlooms_agent_v1_agent_session_proto_init() }
@@ -1603,13 +1957,13 @@ func file_hyperlooms_agent_v1_agent_session_proto_init() {
 	if File_hyperlooms_agent_v1_agent_session_proto != nil {
 		return
 	}
-	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[2].OneofWrappers = []any{
+	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[6].OneofWrappers = []any{
 		(*ConnectRequest_Hello)(nil),
 		(*ConnectRequest_Heartbeat)(nil),
 		(*ConnectRequest_LeaseReceipt)(nil),
 		(*ConnectRequest_CommandStaged)(nil),
 	}
-	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[3].OneofWrappers = []any{
+	file_hyperlooms_agent_v1_agent_session_proto_msgTypes[7].OneofWrappers = []any{
 		(*ConnectResponse_HelloAcknowledgement)(nil),
 		(*ConnectResponse_HeartbeatAcknowledgement)(nil),
 		(*ConnectResponse_LeaseOffer)(nil),
@@ -1622,10 +1976,10 @@ func file_hyperlooms_agent_v1_agent_session_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hyperlooms_agent_v1_agent_session_proto_rawDesc), len(file_hyperlooms_agent_v1_agent_session_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   15,
+			NumEnums:      3,
+			NumMessages:   19,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_hyperlooms_agent_v1_agent_session_proto_goTypes,
 		DependencyIndexes: file_hyperlooms_agent_v1_agent_session_proto_depIdxs,

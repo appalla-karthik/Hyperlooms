@@ -1,4 +1,4 @@
-# Contributing to HYPER_LOOMS
+# Contributing to Hyperlooms
 
 The Phase 0 foundation is complete; product execution work is still ahead. Changes should preserve explicit module boundaries and update the relevant architecture decision when they alter an agreed system property.
 

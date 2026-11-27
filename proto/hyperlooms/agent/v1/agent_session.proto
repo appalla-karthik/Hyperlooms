@@ -19,6 +19,46 @@ service AgentArtifactService {
   rpc ReadInput(ReadInputRequest) returns (stream ReadInputResponse);
 }
 
+// Certificate-bound execution lane. Every call is fenced by lease and command.
+service AgentExecutionService {
+  rpc Advance(AdvanceRequest) returns (AdvanceResponse);
+  rpc UploadResult(stream UploadResultRequest) returns (UploadResultResponse);
+}
+
+enum ExecutionAdvanceAction {
+  EXECUTION_ADVANCE_ACTION_UNSPECIFIED = 0;
+  EXECUTION_ADVANCE_ACTION_STARTING = 1;
+  EXECUTION_ADVANCE_ACTION_RUNNING = 2;
+  EXECUTION_ADVANCE_ACTION_RENEW = 3;
+  EXECUTION_ADVANCE_ACTION_FAILED = 4;
+}
+
+message AdvanceRequest {
+  string lease_id = 1;
+  string command_id = 2;
+  uint64 fencing_token = 3;
+  ExecutionAdvanceAction action = 4;
+}
+
+message AdvanceResponse {
+  google.protobuf.Timestamp expires_at = 1;
+}
+
+message UploadResultRequest {
+  string lease_id = 1;
+  string command_id = 2;
+  uint64 fencing_token = 3;
+  uint64 offset = 4;
+  bytes data = 5;
+  uint64 total_bytes = 6;
+  string sha256 = 7;
+}
+
+message UploadResultResponse {
+  string sha256 = 1;
+  uint64 total_bytes = 2;
+}
+
 message ReadInputRequest {
   string lease_id = 1;
   string command_id = 2;

@@ -29,6 +29,7 @@ type Config struct {
 	StateDir               string
 	RuntimeRecoveryEnabled bool
 	InputReadEnabled       bool
+	ExecutionEnabled       bool
 }
 
 func Load() (Config, error) {
@@ -39,6 +40,10 @@ func Load() (Config, error) {
 	inputReadSetting := valueOrDefault("HYPERLOOMS_AGENT_INPUT_READ_ENABLED", "false")
 	if inputReadSetting != "true" && inputReadSetting != "false" {
 		return Config{}, fmt.Errorf("HYPERLOOMS_AGENT_INPUT_READ_ENABLED must be true or false")
+	}
+	executionSetting := valueOrDefault("HYPERLOOMS_AGENT_EXECUTION_ENABLED", "false")
+	if executionSetting != "true" && executionSetting != "false" {
+		return Config{}, fmt.Errorf("HYPERLOOMS_AGENT_EXECUTION_ENABLED must be true or false")
 	}
 	cfg := Config{
 		AgentID:                valueOrDefault("HYPERLOOMS_AGENT_ID", defaultAgentID),
@@ -52,6 +57,7 @@ func Load() (Config, error) {
 		StateDir:               valueOrDefault("HYPERLOOMS_AGENT_STATE_DIR", ""),
 		RuntimeRecoveryEnabled: recoverySetting == "true",
 		InputReadEnabled:       inputReadSetting == "true",
+		ExecutionEnabled:       executionSetting == "true",
 	}
 
 	if strings.TrimSpace(cfg.AgentID) == "" {
@@ -83,6 +89,9 @@ func Load() (Config, error) {
 	}
 	if cfg.InputReadEnabled && cfg.GrpcAddress == "" {
 		return Config{}, fmt.Errorf("input read requires enrolled agent gRPC configuration")
+	}
+	if cfg.ExecutionEnabled && (!cfg.InputReadEnabled || !cfg.RuntimeRecoveryEnabled || cfg.GrpcAddress == "") {
+		return Config{}, fmt.Errorf("execution requires input read, runtime recovery, and enrolled gRPC configuration")
 	}
 
 	return cfg, nil

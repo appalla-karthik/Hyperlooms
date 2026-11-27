@@ -1,6 +1,6 @@
 # Security Policy
 
-HYPER_LOOMS will execute supported workloads on independently owned machines. Both the workload submitter and provider must be treated as potentially hostile. Security is a product requirement, not a deployment afterthought.
+Hyperlooms will execute supported workloads on independently owned machines. Both the workload submitter and provider must be treated as potentially hostile. Security is a product requirement, not a deployment afterthought.
 
 ## Current status
 

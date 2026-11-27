@@ -39,6 +39,7 @@ type savedCommand struct {
 	InputTotalBytes     uint64     `json:"inputTotalBytes"`
 	StagedAt            time.Time  `json:"stagedAt"`
 	ServerConfirmedAt   *time.Time `json:"serverConfirmedAt,omitempty"`
+	ExecutionStartedAt  *time.Time `json:"executionStartedAt,omitempty"`
 }
 
 type leaseJournal struct {
@@ -168,6 +169,26 @@ func (journal *leaseJournal) confirmCommand(commandID string) error {
 	command := *updated.Command
 	now := time.Now().UTC()
 	command.ServerConfirmedAt = &now
+	updated.Command = &command
+	if err := journal.write(updated); err != nil {
+		return err
+	}
+	journal.active = &updated
+	return nil
+}
+
+// Persist before asking the server to start. A crashed agent never silently replays GPU work.
+func (journal *leaseJournal) markExecutionStarted(commandID string) error {
+	if journal == nil || journal.active == nil || journal.active.Command == nil ||
+		journal.active.Command.CommandID != commandID ||
+		journal.active.Command.ServerConfirmedAt == nil ||
+		journal.active.Command.ExecutionStartedAt != nil {
+		return fmt.Errorf("execution is not startable or was already attempted")
+	}
+	updated := *journal.active
+	command := *updated.Command
+	now := time.Now().UTC()
+	command.ExecutionStartedAt = &now
 	updated.Command = &command
 	if err := journal.write(updated); err != nil {
 		return err

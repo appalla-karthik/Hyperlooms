@@ -42,6 +42,40 @@ func TestLeaseJournalSurvivesRestartAndDuplicateOffer(t *testing.T) {
 	}
 }
 
+func TestExecutionAttemptMarkerIsDurableAndOneShot(t *testing.T) {
+	dir := privateStateDir(t)
+	journal, err := openLeaseJournal(dir, testNodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer := testOffer()
+	if err := journal.store(offer); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.confirm(offer.GetLeaseId()); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.stageCommand(testCommand(offer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.markExecutionStarted(testCommandID); err == nil {
+		t.Fatal("started before server confirmed command staging")
+	}
+	if err := journal.confirmCommand(testCommandID); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.markExecutionStarted(testCommandID); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := openLeaseJournal(dir, testNodeID)
+	if err != nil || reopened.active.Command.ExecutionStartedAt == nil {
+		t.Fatalf("execution attempt not recovered after restart: %v", err)
+	}
+	if err := reopened.markExecutionStarted(testCommandID); err == nil {
+		t.Fatal("replayed a persisted execution attempt")
+	}
+}
+
 func TestLeaseJournalRejectsConflictingLiveOffer(t *testing.T) {
 	journal, err := openLeaseJournal(privateStateDir(t), testNodeID)
 	if err != nil {

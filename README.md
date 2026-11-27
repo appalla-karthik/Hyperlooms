@@ -1,10 +1,10 @@
-# HYPER_LOOMS
+# Hyperlooms
 
 Community-owned, verifiable GPU compute for AI workloads.
 
-> **Development status:** Phase 0 is complete; Phase 1 is in progress. The execution schema, opt-in OIDC/JWT requester API, and certificate-authenticated provider transport exist. Local PostgreSQL/S3 intake and real-certificate mTLS offer/receipt/command-staging flows have passed tests. An approved workload image is still not registered for public use. Default-off gates can deliver a fenced, prepared command over gRPC and transfer its verified `request.json` over a separate scoped mTLS read. The agent durably stages the command and, when opted in, verifies and discards the bounded input bytes. These steps **do not run the command**. Scheduler and expiry pollers remain disabled by default. The restricted Docker runtime is not connected to the agent session. Production PKI, supported-host qualification, artifact-verified completion, and live remote GPU execution remain pending. The repository does not yet execute Hyperlooms jobs on a remote GPU.
+> **Development status:** Phase 0 is complete; Phase 1 is in progress. The opt-in requester console, owner-scoped API, PostgreSQL scheduler/lease, certificate-bound gRPC command/input transfer, Linux amd64 Docker worker, bounded renewal/stop, and digest-checked result path are wired in software. Default-off gates and operator approval still protect the execution path. Local PostgreSQL/S3 and mTLS component tests have passed, but a complete Go-agent-to-control-plane PyTorch run on a supported NVIDIA host has **not** passed. A signed recipe candidate is not an approved public workload. Production PKI, provider onboarding, supported-host qualification, crash/recovery acceptance, and live remote GPU execution remain open; do not treat the repository as a usable public compute network yet.
 
-HYPER_LOOMS is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
+Hyperlooms is being built as a distributed compute network in which independently owned provider machines contribute opt-in GPU capacity and consumers submit supported AI workloads without owning equivalent hardware. The initial architecture decentralizes compute ownership while retaining a centrally operated, auditable control plane.
 
 ## Product direction
 
@@ -115,7 +115,7 @@ Local endpoints:
 - SeaweedFS Admin UI: `http://localhost:9001`
 - Provider-agent health: `http://127.0.0.1:9091/health/live`
 
-The Phase 1 agent gRPC listener is disabled by default. Enabling it requires an operator-issued CA, server certificate/key, a bound provider client certificate, and the corresponding `.env.example` settings. The agent also needs a Linux NVIDIA host with `nvidia-smi`; it does not execute jobs yet. Build the control-plane Docker image from the repository root so Gradle can access the shared protocol: `docker build -f services/control-plane/Dockerfile .`.
+The Phase 1 agent gRPC listener is disabled by default. Enabling it requires an operator-issued CA, server certificate/key, a bound provider client certificate, and the corresponding `.env.example` settings. Execution additionally requires an approved image, qualified Linux amd64 NVIDIA host, enabled scheduler/reconciler/input/execution gates, and a witnessed acceptance run. Build the control-plane Docker image from the repository root so Gradle can access the shared protocol: `docker build -f services/control-plane/Dockerfile .`.
 
 ## Documentation
 

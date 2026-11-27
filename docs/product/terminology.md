@@ -4,7 +4,7 @@
 |---|---|
 | Control plane | Central services that own identity, policy, job state, scheduling, accounting, and audit history. |
 | Provider node | Independently owned machine that opts in to execute approved workloads. |
-| Provider agent | HYPER_LOOMS software running on a provider node. |
+| Provider agent | Hyperlooms software running on a provider node. |
 | Consumer | User or service submitting a workload. |
 | Workload recipe | Versioned, approved definition of an executable workload and its policy. |
 | Job | Consumer request to execute a recipe with specific inputs and requirements. |

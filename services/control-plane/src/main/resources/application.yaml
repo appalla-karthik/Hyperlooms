@@ -82,3 +82,4 @@ hyperlooms:
   agent:
     command-staging-enabled: ${HYPERLOOMS_AGENT_COMMAND_STAGING_ENABLED:false}
     input-read-enabled: ${HYPERLOOMS_AGENT_INPUT_READ_ENABLED:false}
+    execution-enabled: ${HYPERLOOMS_AGENT_EXECUTION_ENABLED:false}

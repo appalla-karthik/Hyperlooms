@@ -49,6 +49,8 @@ public class RequesterApiSecurityConfiguration {
                                 .hasAuthority("SCOPE_jobs:write");
                         auth.requestMatchers(HttpMethod.POST, "/api/v1/jobs/*/cancel")
                                 .hasAuthority("SCOPE_jobs:write");
+                        auth.requestMatchers(HttpMethod.GET, "/api/v1/jobs", "/api/v1/jobs/recipes",
+                                "/api/v1/jobs/*/result").hasAuthority("SCOPE_jobs:read");
                         auth.requestMatchers(HttpMethod.GET, "/api/v1/jobs/*")
                                 .hasAuthority("SCOPE_jobs:read");
                     }

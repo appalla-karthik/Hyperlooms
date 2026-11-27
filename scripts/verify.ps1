@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = "Stop"
 $workspace = Split-Path -Parent $PSScriptRoot
 
-Write-Host "Verifying HYPER_LOOMS control plane..."
+Write-Host "Verifying Hyperlooms control plane..."
 Push-Location (Join-Path $workspace "services/control-plane")
 try {
     & .\gradlew.bat clean test
@@ -14,7 +14,7 @@ finally {
     Pop-Location
 }
 
-Write-Host "Verifying HYPER_LOOMS web application..."
+Write-Host "Verifying Hyperlooms web application..."
 Push-Location (Join-Path $workspace "apps/web")
 try {
     & pnpm check
@@ -28,7 +28,7 @@ finally {
 
 $go = Get-Command go -ErrorAction SilentlyContinue
 if ($null -ne $go) {
-    Write-Host "Verifying HYPER_LOOMS provider agent..."
+    Write-Host "Verifying Hyperlooms provider agent..."
     Push-Location (Join-Path $workspace "agents/provider")
     try {
         $unformatted = & gofmt -l .

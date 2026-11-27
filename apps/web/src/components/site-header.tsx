@@ -64,6 +64,9 @@ export function SiteHeader() {
           <a href="#progress" onClick={() => setOpen(false)}>
             Build progress
           </a>
+          <a href="/console" onClick={() => setOpen(false)}>
+            Console
+          </a>
           <a
             className="header-cta"
             href="https://github.com/appalla-karthik/Hyperlooms"

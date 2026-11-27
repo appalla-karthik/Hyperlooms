@@ -3,6 +3,7 @@ package dev.hyperlooms.controlplane.job;
 import java.io.IOException;
 import java.net.URI;
 import java.util.UUID;
+import java.util.List;
 
 import dev.hyperlooms.controlplane.shared.security.RequesterIdentity;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,15 +40,27 @@ public class JobController {
     private final InputStagingService staging;
     private final JobInputQueueService queue;
     private final JobCancellationService cancellations;
+    private final VerifiedResultService results;
 
     public JobController(JobSubmissionService submissions, JobReadService reads,
             InputStagingService staging, JobInputQueueService queue,
-            JobCancellationService cancellations) {
+            JobCancellationService cancellations, VerifiedResultService results) {
         this.submissions = submissions;
         this.reads = reads;
         this.staging = staging;
         this.queue = queue;
         this.cancellations = cancellations;
+        this.results = results;
+    }
+
+    @GetMapping
+    public List<JobView> list(@AuthenticationPrincipal Jwt jwt) {
+        return reads.recentOwned(RequesterIdentity.fromVerifiedJwt(jwt));
+    }
+
+    @GetMapping("/recipes")
+    public List<JobReadService.RecipeView> recipes() {
+        return reads.approvedRecipes();
     }
 
     @PostMapping
@@ -70,6 +84,16 @@ public class JobController {
     public JobView get(@PathVariable UUID jobId, @AuthenticationPrincipal Jwt jwt) {
         return reads.findOwned(jobId, RequesterIdentity.fromVerifiedJwt(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    @GetMapping(path = "/{jobId}/result", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> result(@PathVariable UUID jobId, @AuthenticationPrincipal Jwt jwt) {
+        try {
+            byte[] bytes = results.readOwned(jobId, RequesterIdentity.fromVerifiedJwt(jwt));
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(bytes);
+        } catch (VerifiedResultService.ResultUnavailableException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
     }
 
     @PutMapping(path = "/{jobId}/inputs/manifest", consumes = "application/json")

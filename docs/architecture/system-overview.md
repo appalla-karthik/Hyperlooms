@@ -2,7 +2,7 @@
 
 ## Architectural style
 
-HYPER_LOOMS begins as a modular monolith control plane plus independently deployed provider agents and workload containers. Compute ownership is decentralized; scheduling, identity, policy, and accounting are centrally coordinated and auditable.
+Hyperlooms begins as a modular monolith control plane plus independently deployed provider agents and workload containers. Compute ownership is decentralized; scheduling, identity, policy, and accounting are centrally coordinated and auditable.
 
 ```text
 Consumer browser

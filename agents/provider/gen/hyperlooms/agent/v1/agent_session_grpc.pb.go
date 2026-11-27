@@ -228,3 +228,141 @@ var AgentArtifactService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "hyperlooms/agent/v1/agent_session.proto",
 }
+
+const (
+	AgentExecutionService_Advance_FullMethodName      = "/hyperlooms.agent.v1.AgentExecutionService/Advance"
+	AgentExecutionService_UploadResult_FullMethodName = "/hyperlooms.agent.v1.AgentExecutionService/UploadResult"
+)
+
+// AgentExecutionServiceClient is the client API for AgentExecutionService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Certificate-bound execution lane. Every call is fenced by lease and command.
+type AgentExecutionServiceClient interface {
+	Advance(ctx context.Context, in *AdvanceRequest, opts ...grpc.CallOption) (*AdvanceResponse, error)
+	UploadResult(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadResultRequest, UploadResultResponse], error)
+}
+
+type agentExecutionServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAgentExecutionServiceClient(cc grpc.ClientConnInterface) AgentExecutionServiceClient {
+	return &agentExecutionServiceClient{cc}
+}
+
+func (c *agentExecutionServiceClient) Advance(ctx context.Context, in *AdvanceRequest, opts ...grpc.CallOption) (*AdvanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdvanceResponse)
+	err := c.cc.Invoke(ctx, AgentExecutionService_Advance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentExecutionServiceClient) UploadResult(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadResultRequest, UploadResultResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentExecutionService_ServiceDesc.Streams[0], AgentExecutionService_UploadResult_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[UploadResultRequest, UploadResultResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentExecutionService_UploadResultClient = grpc.ClientStreamingClient[UploadResultRequest, UploadResultResponse]
+
+// AgentExecutionServiceServer is the server API for AgentExecutionService service.
+// All implementations must embed UnimplementedAgentExecutionServiceServer
+// for forward compatibility.
+//
+// Certificate-bound execution lane. Every call is fenced by lease and command.
+type AgentExecutionServiceServer interface {
+	Advance(context.Context, *AdvanceRequest) (*AdvanceResponse, error)
+	UploadResult(grpc.ClientStreamingServer[UploadResultRequest, UploadResultResponse]) error
+	mustEmbedUnimplementedAgentExecutionServiceServer()
+}
+
+// UnimplementedAgentExecutionServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAgentExecutionServiceServer struct{}
+
+func (UnimplementedAgentExecutionServiceServer) Advance(context.Context, *AdvanceRequest) (*AdvanceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Advance not implemented")
+}
+func (UnimplementedAgentExecutionServiceServer) UploadResult(grpc.ClientStreamingServer[UploadResultRequest, UploadResultResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method UploadResult not implemented")
+}
+func (UnimplementedAgentExecutionServiceServer) mustEmbedUnimplementedAgentExecutionServiceServer() {}
+func (UnimplementedAgentExecutionServiceServer) testEmbeddedByValue()                               {}
+
+// UnsafeAgentExecutionServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AgentExecutionServiceServer will
+// result in compilation errors.
+type UnsafeAgentExecutionServiceServer interface {
+	mustEmbedUnimplementedAgentExecutionServiceServer()
+}
+
+func RegisterAgentExecutionServiceServer(s grpc.ServiceRegistrar, srv AgentExecutionServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAgentExecutionServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AgentExecutionService_ServiceDesc, srv)
+}
+
+func _AgentExecutionService_Advance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdvanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentExecutionServiceServer).Advance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentExecutionService_Advance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentExecutionServiceServer).Advance(ctx, req.(*AdvanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentExecutionService_UploadResult_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentExecutionServiceServer).UploadResult(&grpc.GenericServerStream[UploadResultRequest, UploadResultResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentExecutionService_UploadResultServer = grpc.ClientStreamingServer[UploadResultRequest, UploadResultResponse]
+
+// AgentExecutionService_ServiceDesc is the grpc.ServiceDesc for AgentExecutionService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AgentExecutionService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "hyperlooms.agent.v1.AgentExecutionService",
+	HandlerType: (*AgentExecutionServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Advance",
+			Handler:    _AgentExecutionService_Advance_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "UploadResult",
+			Handler:       _AgentExecutionService_UploadResult_Handler,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "hyperlooms/agent/v1/agent_session.proto",
+}

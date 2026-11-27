@@ -2,13 +2,13 @@
 
 ## Purpose
 
-HYPER_LOOMS exists to make useful GPU compute accessible to people who cannot justify or afford equivalent hardware, while giving GPU owners controlled ways to contribute otherwise idle capacity.
+Hyperlooms exists to make useful GPU compute accessible to people who cannot justify or afford equivalent hardware, while giving GPU owners controlled ways to contribute otherwise idle capacity.
 
 The long-term product is a community-oriented compute network, not merely a machine-listing marketplace. Its differentiating direction combines trusted resource-sharing communities, reciprocal compute credits, understandable workload recipes, and evidence-based provider reputation.
 
 ## Product statement
 
-> HYPER_LOOMS is a community-owned compute fabric where trusted groups pool GPUs, earn reciprocal compute, and run verified workloads without needing cloud-infrastructure expertise.
+> Hyperlooms is a community-owned compute fabric where trusted groups pool GPUs, earn reciprocal compute, and run verified workloads without needing cloud-infrastructure expertise.
 
 ## Initial users
 
@@ -40,4 +40,4 @@ Nodes build a factual execution record from successful jobs, benchmark history, 
 
 ## Guiding question
 
-Can a person with an ordinary laptop complete a useful AI task through HYPER_LOOMS that previously required an expensive GPU workstation—simply, reliably, and at a sensible cost?
+Can a person with an ordinary laptop complete a useful AI task through Hyperlooms that previously required an expensive GPU workstation—simply, reliably, and at a sensible cost?

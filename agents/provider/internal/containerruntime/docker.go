@@ -52,6 +52,8 @@ type Spec struct {
 	// InputJSON is a previously verified, bounded snapshot. Nil keeps the legacy
 	// no-artifact runtime path for internal tests; executable recipes require it.
 	InputJSON []byte
+	// Invoked immediately before docker start; failure aborts and cleans up.
+	OnStarted func(context.Context) error
 }
 
 type Result struct {
@@ -168,6 +170,11 @@ func executeWith(ctx context.Context, spec Spec, cli commandRunner, name string)
 	}()
 	if err := runCtx.Err(); err != nil {
 		return Result{}, err
+	}
+	if spec.OnStarted != nil {
+		if err := spec.OnStarted(runCtx); err != nil {
+			return Result{}, fmt.Errorf("authorize container start: %w", err)
+		}
 	}
 	if _, err := cli.run(runCtx, "start", createdID); err != nil {
 		return Result{}, fmt.Errorf("start restricted container: %w", err)

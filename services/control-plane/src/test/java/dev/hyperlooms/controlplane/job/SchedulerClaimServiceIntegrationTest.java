@@ -30,9 +30,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import dev.hyperlooms.controlplane.provider.ProviderPeerIdentity;
 
@@ -67,7 +69,105 @@ class SchedulerClaimServiceIntegrationTest {
     private LeaseExecutionCommandService executionCommands;
 
     @Autowired
+    private LeaseRuntimeService runtime;
+
+    @Autowired
+    private JobCancellationService cancellations;
+
+    @Autowired
+    private TransactionTemplate transactions;
+
+    @Autowired
     private JdbcTemplate jdbc;
+
+    @Test
+    void ownerStopFencesRunningLeaseAndReconcilesCanceled() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment lease = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "stop");
+        acknowledgements.acknowledge(identity, lease.leaseId(), lease.fencingToken());
+        LeaseExecutionCommand command = executionCommands.prepareForPeer(identity,
+                lease.leaseId(), lease.fencingToken());
+        executionCommands.acknowledgeStaged(identity, lease.leaseId(), command.id(), lease.fencingToken());
+        runtime.advance(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), LeaseRuntimeService.Action.STARTING);
+        runtime.advance(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), LeaseRuntimeService.Action.RUNNING);
+        assertEquals(JobState.RUNNING, cancellations.cancelUnleased(jobId,
+                "claim-test:" + jobId).orElseThrow().state());
+        assertThrows(LeaseExecutionDeniedException.class, () -> runtime.advance(identity,
+                lease.leaseId(), command.id(), lease.fencingToken(), LeaseRuntimeService.Action.RENEW));
+        expirations.expireNext().orElseThrow();
+        assertEquals("CANCELED", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("CANCELED", value("SELECT state FROM job_attempts WHERE id = ?", lease.attemptId()));
+        assertEquals("REVOKED", value("SELECT state FROM gpu_leases WHERE id = ?", lease.leaseId()));
+        assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+    }
+
+    @Test
+    void fencedRuntimeRenewalAndVerifiedResultCompleteOneJob() throws Exception {
+        UUID recipeId = recipe(1024L * 1024 * 1024);
+        UUID jobId = verifiedQueuedJob(recipeId);
+        UUID nodeId = provider(8L * 1024 * 1024 * 1024);
+        LeaseAssignment lease = claims.claimNext().orElseThrow();
+        ProviderPeerIdentity identity = peer(nodeId, "runtime");
+        acknowledgements.acknowledge(identity, lease.leaseId(), lease.fencingToken());
+        LeaseExecutionCommand command = executionCommands.prepareForPeer(identity,
+                lease.leaseId(), lease.fencingToken());
+        executionCommands.acknowledgeStaged(identity, lease.leaseId(), command.id(), lease.fencingToken());
+
+        assertThrows(LeaseExecutionDeniedException.class, () -> runtime.advance(identity,
+                lease.leaseId(), UUID.randomUUID(), lease.fencingToken(), LeaseRuntimeService.Action.STARTING));
+        Instant first = runtime.advance(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), LeaseRuntimeService.Action.STARTING);
+        assertTrue(first.isAfter(Instant.now()));
+        assertEquals("STARTING", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        runtime.advance(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), LeaseRuntimeService.Action.RUNNING);
+        runtime.advance(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), LeaseRuntimeService.Action.RENEW);
+
+        Map<String, byte[]> objects = new HashMap<>();
+        InputObjectStore store = new InputObjectStore() {
+            @Override public InputStream get(String key) {
+                byte[] content = objects.get(key);
+                if (content == null) throw new InputObjectMissingException();
+                return new ByteArrayInputStream(content);
+            }
+            @Override public void put(String key, byte[] content) { throw new UnsupportedOperationException(); }
+            @Override public boolean putIfAbsent(String key, byte[] content) {
+                return objects.putIfAbsent(key, content) == null;
+            }
+        };
+        @SuppressWarnings("unchecked")
+        ObjectProvider<InputObjectStore> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(store);
+        VerifiedResultService results = new VerifiedResultService(jdbc, transactions, runtime, provider);
+        byte[] output = ("{\"schemaVersion\":1,\"device\":\"cuda\",\"epochs\":20,"
+                + "\"weights\":[1.5],\"bias\":0.5,\"meanSquaredError\":0.01}")
+                .getBytes(StandardCharsets.US_ASCII);
+        byte[] duplicate = new String(output, StandardCharsets.US_ASCII)
+                .replace("\"epochs\":20", "\"epochs\":20,\"epochs\":20")
+                .getBytes(StandardCharsets.US_ASCII);
+        assertThrows(LeaseExecutionDeniedException.class, () -> results.complete(identity,
+                lease.leaseId(), command.id(), lease.fencingToken(), duplicate, sha256(duplicate)));
+        assertThrows(LeaseExecutionDeniedException.class, () -> results.complete(identity,
+                lease.leaseId(), command.id(), lease.fencingToken(), output, DIGEST));
+        assertEquals("RUNNING", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals(sha256(output), results.complete(identity, lease.leaseId(), command.id(),
+                lease.fencingToken(), output, sha256(output)));
+        assertEquals("SUCCEEDED", value("SELECT state FROM jobs WHERE id = ?", jobId));
+        assertEquals("COMPLETED", value("SELECT state FROM gpu_leases WHERE id = ?", lease.leaseId()));
+        assertEquals("OFFLINE", value("SELECT availability_state FROM provider_nodes WHERE id = ?", nodeId));
+        assertEquals(new String(output, StandardCharsets.US_ASCII),
+                new String(results.readOwned(jobId, "claim-test:" + jobId), StandardCharsets.US_ASCII));
+        assertThrows(VerifiedResultService.ResultUnavailableException.class,
+                () -> results.readOwned(jobId, "another-user"));
+        assertThrows(LeaseExecutionDeniedException.class, () -> runtime.advance(identity,
+                lease.leaseId(), command.id(), lease.fencingToken(), LeaseRuntimeService.Action.RENEW));
+    }
 
     @AfterEach
     void removeTestRecords() {
