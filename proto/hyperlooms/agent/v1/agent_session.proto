@@ -14,6 +14,24 @@ service AgentSessionService {
   rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
 }
 
+// Separate mTLS data path. Only the fixed approved recipe input is exposed.
+service AgentArtifactService {
+  rpc ReadInput(ReadInputRequest) returns (stream ReadInputResponse);
+}
+
+message ReadInputRequest {
+  string lease_id = 1;
+  string command_id = 2;
+  uint64 fencing_token = 3;
+}
+
+message ReadInputResponse {
+  uint64 offset = 1;
+  bytes data = 2;
+  uint64 total_bytes = 3;
+  string sha256 = 4;
+}
+
 message ConnectRequest {
   string message_id = 1;
   oneof body {

@@ -73,6 +73,12 @@ public final class ScopedInputReadService {
         return content;
     }
 
+    /** Recheck before each outbound chunk; expiry/revocation must stop transfer. */
+    public void requireCurrent(ProviderPeerIdentity peer, UUID leaseId, UUID commandId,
+            long fencingToken) {
+        requireStagedPlan(peer, leaseId, commandId, fencingToken);
+    }
+
     private LeaseExecutionPlan requireStagedPlan(ProviderPeerIdentity peer, UUID leaseId,
             UUID commandId, long fencingToken) {
         if (commandId == null) {

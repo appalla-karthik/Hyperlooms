@@ -119,3 +119,112 @@ var AgentSessionService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "hyperlooms/agent/v1/agent_session.proto",
 }
+
+const (
+	AgentArtifactService_ReadInput_FullMethodName = "/hyperlooms.agent.v1.AgentArtifactService/ReadInput"
+)
+
+// AgentArtifactServiceClient is the client API for AgentArtifactService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Separate mTLS data path. Only the fixed approved recipe input is exposed.
+type AgentArtifactServiceClient interface {
+	ReadInput(ctx context.Context, in *ReadInputRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadInputResponse], error)
+}
+
+type agentArtifactServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAgentArtifactServiceClient(cc grpc.ClientConnInterface) AgentArtifactServiceClient {
+	return &agentArtifactServiceClient{cc}
+}
+
+func (c *agentArtifactServiceClient) ReadInput(ctx context.Context, in *ReadInputRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadInputResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentArtifactService_ServiceDesc.Streams[0], AgentArtifactService_ReadInput_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadInputRequest, ReadInputResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentArtifactService_ReadInputClient = grpc.ServerStreamingClient[ReadInputResponse]
+
+// AgentArtifactServiceServer is the server API for AgentArtifactService service.
+// All implementations must embed UnimplementedAgentArtifactServiceServer
+// for forward compatibility.
+//
+// Separate mTLS data path. Only the fixed approved recipe input is exposed.
+type AgentArtifactServiceServer interface {
+	ReadInput(*ReadInputRequest, grpc.ServerStreamingServer[ReadInputResponse]) error
+	mustEmbedUnimplementedAgentArtifactServiceServer()
+}
+
+// UnimplementedAgentArtifactServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAgentArtifactServiceServer struct{}
+
+func (UnimplementedAgentArtifactServiceServer) ReadInput(*ReadInputRequest, grpc.ServerStreamingServer[ReadInputResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method ReadInput not implemented")
+}
+func (UnimplementedAgentArtifactServiceServer) mustEmbedUnimplementedAgentArtifactServiceServer() {}
+func (UnimplementedAgentArtifactServiceServer) testEmbeddedByValue()                              {}
+
+// UnsafeAgentArtifactServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AgentArtifactServiceServer will
+// result in compilation errors.
+type UnsafeAgentArtifactServiceServer interface {
+	mustEmbedUnimplementedAgentArtifactServiceServer()
+}
+
+func RegisterAgentArtifactServiceServer(s grpc.ServiceRegistrar, srv AgentArtifactServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAgentArtifactServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AgentArtifactService_ServiceDesc, srv)
+}
+
+func _AgentArtifactService_ReadInput_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadInputRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentArtifactServiceServer).ReadInput(m, &grpc.GenericServerStream[ReadInputRequest, ReadInputResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentArtifactService_ReadInputServer = grpc.ServerStreamingServer[ReadInputResponse]
+
+// AgentArtifactService_ServiceDesc is the grpc.ServiceDesc for AgentArtifactService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AgentArtifactService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "hyperlooms.agent.v1.AgentArtifactService",
+	HandlerType: (*AgentArtifactServiceServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ReadInput",
+			Handler:       _AgentArtifactService_ReadInput_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "hyperlooms/agent/v1/agent_session.proto",
+}

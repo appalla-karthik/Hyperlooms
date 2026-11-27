@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -111,6 +112,7 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 	var sequence uint64
 	pendingReceipts := make(map[string]string)
 	pendingCommands := make(map[string]string)
+	fetchedCommandID := ""
 	for {
 		select {
 		case <-ctx.Done():
@@ -137,6 +139,18 @@ func connectOnce(ctx context.Context, cfg config.Config, version string, logger 
 				return fmt.Errorf("heartbeat exchange: %w", err)
 			}
 			state.Heartbeat()
+			if cfg.InputReadEnabled && journal.active != nil && journal.active.Command != nil &&
+				journal.active.Command.ServerConfirmedAt != nil &&
+				journal.active.Command.CommandID != fetchedCommandID {
+				input, err := fetchInput(ctx, agentv1.NewAgentArtifactServiceClient(connection), journal)
+				if err != nil {
+					return fmt.Errorf("read staged command input: %w", err)
+				}
+				checksum := sha256.Sum256(input)
+				fetchedCommandID = journal.active.Command.CommandID
+				logger.Info("staged input verified; execution not started",
+					"command_id", fetchedCommandID, "bytes", len(input), "sha256", fmt.Sprintf("%x", checksum))
+			}
 		}
 	}
 }

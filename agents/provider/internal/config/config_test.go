@@ -76,3 +76,15 @@ func TestLoadRuntimeRecoveryRequiresEnrolledAgent(t *testing.T) {
 		t.Fatal("invalid recovery boolean accepted")
 	}
 }
+
+func TestLoadInputReadRequiresEnrolledAgentAndBoolean(t *testing.T) {
+	t.Setenv("HYPERLOOMS_AGENT_GRPC_ADDRESS", "")
+	t.Setenv("HYPERLOOMS_AGENT_INPUT_READ_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("input read accepted without enrolled agent")
+	}
+	t.Setenv("HYPERLOOMS_AGENT_INPUT_READ_ENABLED", "yes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid input read boolean accepted")
+	}
+}

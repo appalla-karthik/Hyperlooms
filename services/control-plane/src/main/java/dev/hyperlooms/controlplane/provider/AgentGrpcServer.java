@@ -25,6 +25,7 @@ public final class AgentGrpcServer implements SmartLifecycle {
     private final String privateKey;
     private final String clientCa;
     private final AgentSessionGrpcService sessions;
+    private final AgentArtifactGrpcService artifacts;
     private Server server;
 
     public AgentGrpcServer(
@@ -32,12 +33,13 @@ public final class AgentGrpcServer implements SmartLifecycle {
             @Value("${hyperlooms.agent-grpc.certificate:}") String certificate,
             @Value("${hyperlooms.agent-grpc.private-key:}") String privateKey,
             @Value("${hyperlooms.agent-grpc.client-ca:}") String clientCa,
-            AgentSessionGrpcService sessions) {
+            AgentSessionGrpcService sessions, AgentArtifactGrpcService artifacts) {
         this.port = port;
         this.certificate = certificate;
         this.privateKey = privateKey;
         this.clientCa = clientCa;
         this.sessions = sessions;
+        this.artifacts = artifacts;
     }
 
     @Override
@@ -56,6 +58,7 @@ public final class AgentGrpcServer implements SmartLifecycle {
             server = Grpc.newServerBuilderForPort(port, credentials)
                     .maxInboundMessageSize(64 * 1024)
                     .addService(ServerInterceptors.intercept(sessions, new AgentPeerInterceptor()))
+                    .addService(ServerInterceptors.intercept(artifacts, new AgentPeerInterceptor()))
                     .build()
                     .start();
         } catch (IOException exception) {

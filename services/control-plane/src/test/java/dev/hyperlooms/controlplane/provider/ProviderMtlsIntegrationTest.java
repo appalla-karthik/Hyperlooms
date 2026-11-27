@@ -2,15 +2,25 @@ package dev.hyperlooms.controlplane.provider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -22,20 +32,27 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import dev.hyperlooms.controlplane.job.InputObjectMissingException;
+import dev.hyperlooms.controlplane.job.InputObjectStore;
 import dev.hyperlooms.controlplane.job.LeaseAssignment;
+import dev.hyperlooms.controlplane.job.LeaseExecutionPlanService;
+import dev.hyperlooms.controlplane.job.ScopedInputReadService;
 import dev.hyperlooms.controlplane.job.SchedulerClaimService;
+import dev.hyperlooms.protocol.agent.v1.AgentArtifactServiceGrpc;
+import dev.hyperlooms.protocol.agent.v1.AgentCommandStaged;
 import dev.hyperlooms.protocol.agent.v1.AgentHeartbeat;
 import dev.hyperlooms.protocol.agent.v1.AgentHello;
-import dev.hyperlooms.protocol.agent.v1.AgentCommandStaged;
 import dev.hyperlooms.protocol.agent.v1.AgentLeaseReceipt;
 import dev.hyperlooms.protocol.agent.v1.AgentSessionServiceGrpc;
 import dev.hyperlooms.protocol.agent.v1.ConnectRequest;
 import dev.hyperlooms.protocol.agent.v1.ConnectResponse;
 import dev.hyperlooms.protocol.agent.v1.GpuCapability;
+import dev.hyperlooms.protocol.agent.v1.ReadInputRequest;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -68,6 +85,9 @@ class ProviderMtlsIntegrationTest {
 
     @Autowired
     private SchedulerClaimService claims;
+
+    @Autowired
+    private LeaseExecutionPlanService executionPlans;
 
     private final List<UUID> inviteIds = new ArrayList<>();
     private final List<UUID> jobIds = new ArrayList<>();
@@ -127,7 +147,28 @@ class ProviderMtlsIntegrationTest {
                 new OperatorCertificateVerifier(ca.certificate().toString())
                         .verifyClientCertificate(clientCertificate.certificate()));
 
-        try (TestServer server = new TestServer(serverCertificate, ca.certificate(), sessions);
+        Map<String, byte[]> content = new HashMap<>();
+        InputObjectStore objects = new InputObjectStore() {
+            @Override public InputStream get(String key) {
+                byte[] value = content.get(key);
+                if (value == null) {
+                    throw new InputObjectMissingException();
+                }
+                return new ByteArrayInputStream(value);
+            }
+            @Override public void put(String key, byte[] bytes) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public boolean putIfAbsent(String key, byte[] bytes) {
+                throw new UnsupportedOperationException();
+            }
+        };
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ScopedInputReadService> readers = mock(ObjectProvider.class);
+        when(readers.getIfAvailable()).thenReturn(new ScopedInputReadService(jdbc, executionPlans, objects));
+        AgentArtifactGrpcService artifacts = new AgentArtifactGrpcService(readers, true);
+
+        try (TestServer server = new TestServer(serverCertificate, ca.certificate(), sessions, artifacts);
                 TestSession client = server.connect(clientCertificate, ca.certificate())) {
             client.send(hello(nodeId, true));
             assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
@@ -149,15 +190,22 @@ class ProviderMtlsIntegrationTest {
                     """, recipeId, "mtls-stage-test-" + recipeId, "sha256:" + digest);
             UUID jobId = UUID.randomUUID();
             jobIds.add(jobId);
+            byte[] input = "{\"small\":\"mtls input\"}".getBytes(StandardCharsets.US_ASCII);
+            byte[] manifest = ("{\"files\":[{\"path\":\"request.json\",\"sha256\":\""
+                    + sha256(input) + "\",\"sizeBytes\":" + input.length
+                    + "}],\"schemaVersion\":1}").getBytes(StandardCharsets.US_ASCII);
+            String prefix = "jobs/" + jobId + "/verified/snapshot/";
+            content.put(prefix + "manifest.json", manifest);
+            content.put(prefix + "files/request.json", input);
             jdbc.update("""
                     INSERT INTO jobs
                         (id, requester_subject, recipe_id, state, idempotency_key,
                          request_sha256, request_version, input_manifest_sha256,
                          verified_input_manifest_sha256, input_artifact_prefix,
                          input_verified_at, input_file_count, input_total_bytes)
-                    VALUES (?, ?, ?, 'QUEUED', ?, ?, 1, ?, ?, ?, CURRENT_TIMESTAMP, 1, 32)
+                    VALUES (?, ?, ?, 'QUEUED', ?, ?, 1, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
                     """, jobId, "mtls-stage-test:" + jobId, recipeId, jobId.toString(), digest,
-                    digest, digest, "jobs/" + jobId + "/verified/snapshot");
+                    sha256(manifest), sha256(manifest), prefix, input.length);
             LeaseAssignment assignment = claims.claimNext().orElseThrow();
             assertEquals(jobId, assignment.jobId());
 
@@ -186,7 +234,7 @@ class ProviderMtlsIntegrationTest {
             assertEquals(assignment.fencingToken(), command.getFencingToken());
             assertEquals("GPU-test", command.getGpuUuid());
             assertEquals("sha256:" + digest, command.getImageDigest());
-            assertEquals("jobs/" + jobId + "/verified/snapshot", command.getVerifiedInputPrefix());
+            assertEquals(prefix, command.getVerifiedInputPrefix());
             assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
                     .hasHeartbeatAcknowledgement());
 
@@ -203,11 +251,30 @@ class ProviderMtlsIntegrationTest {
                     """, Long.class, UUID.fromString(command.getCommandId()), nodeId,
                     assignment.fencingToken()));
 
+            ReadInputRequest read = ReadInputRequest.newBuilder()
+                    .setLeaseId(assignment.leaseId().toString())
+                    .setCommandId(command.getCommandId())
+                    .setFencingToken(assignment.fencingToken()).build();
+            var chunks = AgentArtifactServiceGrpc.newBlockingStub(client.channel).readInput(read);
+            byte[] received = chunks.next().getData().toByteArray();
+            assertEquals(new String(input, StandardCharsets.US_ASCII),
+                    new String(received, StandardCharsets.US_ASCII));
+            assertTrue(!chunks.hasNext());
+            ReadInputRequest wrongToken = read.toBuilder().setFencingToken(assignment.fencingToken() + 1).build();
+            assertEquals(Status.Code.PERMISSION_DENIED, Status.fromThrowable(assertThrows(
+                    io.grpc.StatusRuntimeException.class, () -> AgentArtifactServiceGrpc
+                            .newBlockingStub(client.channel).readInput(wrongToken).next())).getCode());
+
             client.send(ConnectRequest.newBuilder().setMessageId("heartbeat-after-stage")
                     .setHeartbeat(AgentHeartbeat.newBuilder().setNodeId(nodeId.toString())
                             .setSequence(3)).build());
             assertTrue(assertInstanceOf(ConnectResponse.class, client.receive())
                     .hasHeartbeatAcknowledgement());
+            jdbc.update("UPDATE provider_certificates SET revoked_at = CURRENT_TIMESTAMP "
+                    + "WHERE node_id = ?", nodeId);
+            assertEquals(Status.Code.PERMISSION_DENIED, Status.fromThrowable(assertThrows(
+                    io.grpc.StatusRuntimeException.class, () -> AgentArtifactServiceGrpc
+                            .newBlockingStub(client.channel).readInput(read).next())).getCode());
         }
     }
 
@@ -443,19 +510,31 @@ class ProviderMtlsIntegrationTest {
         }
     }
 
+    private static String sha256(byte[] bytes) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+    }
+
     private static final class TestServer implements AutoCloseable {
         private final Server server;
 
         private TestServer(SignedCertificate identity, Path ca, AgentSessionGrpcService service)
                 throws IOException {
+            this(identity, ca, service, null);
+        }
+
+        private TestServer(SignedCertificate identity, Path ca, AgentSessionGrpcService service,
+                AgentArtifactGrpcService artifacts) throws IOException {
             ServerCredentials credentials = TlsServerCredentials.newBuilder()
                     .keyManager(identity.certificate().toFile(), identity.key().toFile())
                     .trustManager(ca.toFile())
                     .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
                     .build();
-            server = Grpc.newServerBuilderForPort(0, credentials)
-                    .addService(ServerInterceptors.intercept(service, new AgentPeerInterceptor()))
-                    .build().start();
+            var builder = Grpc.newServerBuilderForPort(0, credentials)
+                    .addService(ServerInterceptors.intercept(service, new AgentPeerInterceptor()));
+            if (artifacts != null) {
+                builder.addService(ServerInterceptors.intercept(artifacts, new AgentPeerInterceptor()));
+            }
+            server = builder.build().start();
         }
 
         private TestSession connect(SignedCertificate identity, Path ca) throws IOException {
